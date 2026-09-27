@@ -4,7 +4,11 @@ import asyncpg
 
 from core.security import decode_access_token
 from db.pool import get_db_conn
-from repositories.accounts import load_auth_scope, user_context_from_scope, validate_analytics_filters
+from repositories.accounts import (
+    load_auth_scope,
+    user_context_from_scope,
+    validate_analytics_filters,
+)
 from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 
@@ -22,11 +26,11 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     user_ctx = UserContext(
-        user_id=payload.get("user_id"),
-        role=payload.get("role") or "",
-        scope_id=payload.get("scope_id"),
-        person_id=payload.get("person_id") or "",
-        student_id=payload.get("student_id"),
+        user_id=payload["user_id"],
+        role="",
+        scope_id=None,
+        person_id="",
+        student_id=None,
     )
     request.state.user = user_ctx
     return user_ctx

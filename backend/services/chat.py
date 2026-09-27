@@ -1,23 +1,13 @@
-"""Backend-enforced chat: role/domain gate that used to live on the frontend,
-but runs here where `ctx.role` comes from the verified JWT (see
-core/dependencies.get_current_user) instead of a client-supplied field.
-`classify()` stays a deterministic, pre-retrieval permission gate — exactly
-the shape needed once Phase 3 adds a document retriever alongside these
-aggregate answers.
+"""Role gate for the single chat endpoint.
+
+`classify()` runs before the RAG engine. The live UserContext, not the JWT
+role claim, is what the engine and the database use.
 """
 
 import re
+
 import asyncpg
 from schemas.auth import UserContext
-from schemas.filters import AnalyticsFilters
-from repositories.accounts import validate_analytics_filters
-
-import repositories.management as mgmt_repo
-import repositories.course_performance as course_repo
-import repositories.integrity as integrity_repo
-import repositories.item_analysis as item_repo
-import repositories.performance as perf_repo
-import repositories.student as student_repo
 
 DataDomain = str
 
@@ -91,10 +81,19 @@ _DEFAULT_DOMAIN: dict[str, DataDomain] = {
 def classify(question: str, role: str) -> DataDomain:
     q = question.lower()
     asks_about_person = bool(
-        re.search(r"\b(who|whose|which student|student s-?\d+|top student|name of)\b", q)
+        re.search(
+            r"\b(who|whose|which student|student s-?\d+|top student|name of)\b", q
+        )
     )
     default = _DEFAULT_DOMAIN.get(role, "own_courses")
-    if re.search(r"\b(ip|login|device|anomal|cheat|similar|flag|suspicio|monitor)\b", q):
+    if role == "student" and re.search(
+        r"\b(all students|every student|other students|another student|all grades)\b",
+        q,
+    ):
+        return "named_students"
+    if re.search(
+        r"\b(ip|login|device|anomal|cheat|similar|flag|suspicio|monitor)\b", q
+    ):
         return "integrity_monitoring"
     if re.search(r"\b(rubric|marking|grading rationale|model answer|answer key)\b", q):
         return "grading_rationale"
@@ -124,7 +123,10 @@ def refusal_for(role: str, domain: DataDomain) -> str:
             "That covers courses outside the sections assigned to you. Ask your "
             "administrator to enable platform-wide access if you need it."
         )
-    if role == "it_academic_integrity" and domain in ("exam_content", "grading_rationale"):
+    if role == "it_academic_integrity" and domain in (
+        "exam_content",
+        "grading_rationale",
+    ):
         return (
             "Integrity access covers monitoring signals only — raw exam content "
             "and grading rationale aren't available here."
@@ -132,88 +134,20 @@ def refusal_for(role: str, domain: DataDomain) -> str:
     return "That data is outside what your role is authorized to see, so I can't answer it."
 
 
-async def _answer(
-    ctx: UserContext, db: asyncpg.Connection, domain: DataDomain, filters: AnalyticsFilters
-) -> str:
-    role = ctx.role
+async def get_chat_answer(
+    ctx: UserContext,
+    db: asyncpg.Connection,
+    question: str,
+    pool=None,
+) -> dict:
+    """Domain gate, then the RAG engine. There is one chat implementation."""
+    from rag.chat_engine import answer_question
 
-    if domain == "own_performance" and role == "student":
-        d = await student_repo.get_student_dashboard(ctx, db, filters)
-        return (
-            f"Your average is {d['average']}, versus a class average of {d['classAverage']}. "
-            f"Your best topic is {d['bestTopic']}; your weakest is {d['weakestTopic']}."
-        )
-
-    if domain == "anonymized_cohort":
-        if role == "student":
-            d = await student_repo.get_student_dashboard(ctx, db, filters)
-            return (
-                f"The class average across your exams is {d['classAverage']}; your average "
-                f"is {d['average']}. I can only show aggregates here, never individual classmates."
-            )
-        perf = await perf_repo.get_student_performance(ctx, db, filters)
-        if not perf["averageByExam"]:
-            return "There are no recorded attempts in this scope yet."
-        lo = min(perf["averageByExam"], key=lambda r: r["average"])
-        hi = max(perf["averageByExam"], key=lambda r: r["average"])
-        return (
-            f"Exam averages in this scope range from {lo['average']} ({lo['exam']}) to "
-            f"{hi['average']} ({hi['exam']})."
-        )
-
-    if domain in ("own_courses", "all_courses"):
-        cp = await course_repo.get_course_performance(ctx, db, filters)
-        if not cp["averageByCourse"]:
-            return "There are no recorded attempts in your courses yet."
-        lines = ", ".join(f"{c['course']} averages {c['average']}" for c in cp["averageByCourse"][:4])
-        return f"Across the curricula in scope: {lines}."
-
-    if domain == "item_analysis":
-        ia = await item_repo.get_item_analysis(ctx, db, filters)
-        if not ia["needsReview"]:
-            return (
-                "No items are flagged right now — either quality looks fine, or no "
-                "graded item-level answers are recorded yet."
-            )
-        top = ia["needsReview"][0]
-        return (
-            f"The weakest item is question {top['number']} on {top['exam']}, "
-            f"discrimination index {top['discriminationIndex']}."
-        )
-
-    if domain == "integrity_monitoring":
-        ir = await integrity_repo.get_integrity_report(ctx, db, filters)
-        if not ir["totalAttempts"]:
-            return "There are no monitored attempts in this scope."
-        return f"{ir['flaggedCount']} of {ir['totalAttempts']} monitored attempts show at least one anomaly."
-
-    if domain == "institution_kpis":
-        mo = await mgmt_repo.get_management_overview(ctx, db, filters)
-        kpis = ", ".join(f"{k['label']}: {k['value']}" for k in mo["kpis"])
-        return f"{kpis}. {mo['insight']}"
-
-    if domain == "named_students":
-        return (
-            "I can only summarize named records inside the Student Profiles report, "
-            "scoped to your role — open Student Profiles for the individual breakdown."
-        )
-
-    if domain == "exam_content":
-        return (
-            "I can point you to item stems inside Item Analysis for exams in your "
-            "scope — open that report for the question text."
-        )
-
-    if domain == "grading_rationale":
-        return "Grading rubrics live with your course tools; there's no rubric store wired up here yet."
-
-    return "I don't have real data wired up for that question yet."
-
-
-async def get_chat_answer(ctx: UserContext, db: asyncpg.Connection, question: str) -> dict:
     domain = classify(question, ctx.role)
     allowed = DOMAIN_ALLOW.get(ctx.role, set())
     if domain not in allowed:
+        from rag.chat_engine import _log
+
+        await _log(pool, ctx, question, None, None, "blocked", 0, True)
         return {"text": refusal_for(ctx.role, domain), "blocked": True}
-    filters = await validate_analytics_filters(ctx, db, AnalyticsFilters(), require_complete=False)
-    return {"text": await _answer(ctx, db, domain, filters), "blocked": False}
+    return await answer_question(ctx, db, question, pool)

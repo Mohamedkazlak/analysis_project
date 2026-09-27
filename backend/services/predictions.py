@@ -31,7 +31,9 @@ def _tone_for(value: float, benchmark: float) -> str:
     return "amber"
 
 
-def current_standing_from_context(role: str, ctx_data: dict[str, Any]) -> Optional[dict]:
+def current_standing_from_context(
+    role: str, ctx_data: dict[str, Any]
+) -> Optional[dict]:
     if role in ("senior_management", "program_director"):
         overview = ctx_data.get("overview") or {}
         colleges = overview.get("passRateByCollege") or []
@@ -118,11 +120,72 @@ def current_standing_from_context(role: str, ctx_data: dict[str, Any]) -> Option
                 {
                     "label": s["exam"],
                     "value": f"{s['flagged']}/{s['total']} flagged",
-                    "tone": "rose" if s["total"] and s["flagged"] / s["total"] > 0.2 else "amber",
+                    "tone": (
+                        "rose"
+                        if s["total"] and s["flagged"] / s["total"] > 0.2
+                        else "amber"
+                    ),
                 }
                 for s in ranked
             ],
             "action": {"label": "Open live monitoring", "to": "/real-time"},
+        }
+
+    if role == "professor":
+        sections = (ctx_data.get("courses") or {}).get("sections") or []
+        if not sections:
+            return None
+        weakest = min(sections, key=lambda section: section["average"])
+        return {
+            "kind": "current_standing",
+            "title": "Current standing · assigned sections",
+            "direction": "stable",
+            "summary": SUMMARY_NOTE,
+            "rows": [
+                {
+                    "label": section["section"],
+                    "value": f"{section['average']} avg",
+                    "tone": _tone_for(section["average"], weakest["average"]),
+                }
+                for section in sorted(sections, key=lambda section: section["average"])[
+                    :3
+                ]
+            ],
+            "action": {"label": "Open section comparison", "to": "/performance"},
+        }
+
+    if role == "student":
+        dashboard = ctx_data.get("dashboard") or {}
+        average = dashboard.get("average")
+        if average is None:
+            return None
+        class_average = dashboard.get("classAverage")
+        rows = [
+            {
+                "label": "Your average",
+                "value": str(average),
+                "tone": (
+                    _tone_for(float(average), float(class_average))
+                    if class_average is not None
+                    else "iris"
+                ),
+            }
+        ]
+        if class_average is not None:
+            rows.append(
+                {
+                    "label": "Class average",
+                    "value": str(class_average),
+                    "tone": "iris",
+                }
+            )
+        return {
+            "kind": "current_standing",
+            "title": "Current standing · your recorded scores",
+            "direction": "stable",
+            "summary": SUMMARY_NOTE,
+            "rows": rows,
+            "action": {"label": "Open your record", "to": "/student"},
         }
 
     return None
@@ -209,7 +272,9 @@ async def get_standing_or_forecast(
         )
         if len(year_avgs) >= 2:
             delta = year_avgs[-1]["avg"] - year_avgs[0]["avg"]
-            result["direction"] = "rising" if delta > 1 else "falling" if delta < -1 else "stable"
+            result["direction"] = (
+                "rising" if delta > 1 else "falling" if delta < -1 else "stable"
+            )
             result["summary"] = (
                 f"Year-over-year transcript average moved {delta:+.1f} points. "
                 "This is historical standing, not a model forecast."

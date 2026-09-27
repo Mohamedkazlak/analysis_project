@@ -1,6 +1,13 @@
 import { redirect } from "@tanstack/react-router";
 import type { Role } from "../types";
-import { getAuthToken, roleFromToken, userIdFromToken } from "./token";
+import { getMe } from "../api";
+import {
+  getAuthToken,
+  rememberSessionRole,
+  roleFromToken,
+  sessionRoleForToken,
+  userIdFromToken,
+} from "./token";
 
 export const ROLE_SLUG: Record<Role, string> = {
   senior_management: "senior-management",
@@ -114,9 +121,9 @@ export function roleNavigateTarget(dest: string): {
 
 /** Client-only guard for leftover unprefixed report URLs. */
 export function legacyLeafGuard(leaf: string) {
-  return () => {
+  return async () => {
     if (typeof window === "undefined") return;
-    const role = getActiveDemoRole();
+    const role = await ensureActiveRole();
     if (!role) {
       throw redirect({ to: "/login" });
     }
@@ -128,19 +135,14 @@ export function legacyLeafGuard(leaf: string) {
   };
 }
 
-export function legacyRedirectTo(
-  pathname: string,
-  role: Role,
-): string | null {
+export function legacyRedirectTo(pathname: string, role: Role): string | null {
   const parts = pathname.split("/").filter(Boolean);
   const first = parts[0];
   if (!first) return roleHome(role);
   if (SLUG_ROLE[first]) return null;
   const rest = parts.slice(1);
   if (first === "management" || first === "my-progress") {
-    return rest.length
-      ? `${roleHome(role)}/${rest.join("/")}`
-      : roleHome(role);
+    return rest.length ? `${roleHome(role)}/${rest.join("/")}` : roleHome(role);
   }
   if (LEGACY_REPORTS.has(first)) {
     return `${roleHome(role)}/${parts.join("/")}`;
@@ -148,9 +150,27 @@ export function legacyRedirectTo(
   return null;
 }
 
-/** Gets role from the JWT in localStorage or the auth cookie. */
+/** Role used to choose a dashboard. Comes from the last live account lookup. */
 export function getActiveDemoRole(): Role | null {
-  return roleFromToken(getAuthToken());
+  const token = getAuthToken();
+  return sessionRoleForToken(token) ?? roleFromToken(token);
+}
+
+/** Load the live role when the browser has a token but no dashboard hint yet. */
+export async function ensureActiveRole(): Promise<Role | null> {
+  const token = getAuthToken();
+  const userId = userIdFromToken(token);
+  if (!userId) return null;
+  const known = sessionRoleForToken(token) ?? roleFromToken(token);
+  if (known) return known;
+  try {
+    const me = await getMe();
+    if (!me?.user_id || me.user_id !== userId || !me.role) return null;
+    rememberSessionRole(me.user_id, me.role);
+    return getActiveDemoRole();
+  } catch {
+    return null;
+  }
 }
 
 export function getActiveDemoUserId(): string | null {
@@ -228,8 +248,8 @@ export function assertRoleAccess(pathname: string, role: Role | null) {
 
 /** Factory for route beforeLoad guards. `report` is the leaf, e.g. /courses. */
 export function roleGuard(report: string) {
-  return () => {
+  return async () => {
     if (typeof window === "undefined") return;
-    assertRoleAccess(report, getActiveDemoRole());
+    assertRoleAccess(report, await ensureActiveRole());
   };
 }

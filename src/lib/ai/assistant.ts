@@ -1,14 +1,8 @@
 import { fetchFromBackend } from "../api";
 
 /**
- * Chat is now a real backend endpoint (`POST /api/chat`, backend/routers/
- * ai_insights.py) protected by `Depends(get_current_user)`. Role comes from
- * the verified JWT on the server — never from this request body — which
- * closes the "role is just a field the client sends" gap that existed when
- * this ran as a client-trusted server function. The domain-classification
- * gate (`classify()` + the role→domain access matrix) now lives in
- * backend/services/chat.py, ported 1:1 from this file's previous
- * implementation, and runs before any repository is touched.
+ * Chat is `POST /api/chat`. The server loads the live account from the JWT
+ * user id, then the RAG engine validates any generated SQL before it runs.
  */
 
 export interface AssistantAnswer {

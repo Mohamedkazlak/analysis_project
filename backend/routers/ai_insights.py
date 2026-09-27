@@ -4,13 +4,12 @@ from fastapi import APIRouter, Depends
 import asyncpg
 
 from schemas.auth import UserContext
-from schemas.ai_insights import Insight, Prediction, RecommendationSet, ChatRequest, ChatResponse, AiDecision
+from schemas.ai_insights import Insight, Prediction, RecommendationSet, AiDecision
 from schemas.filters import AnalyticsFilters, AiDecisionRequest
 from core.dependencies import get_live_user, get_validated_filters
 from db.pool import get_db_conn
 from repositories.accounts import validate_analytics_filters
 import services.ai_insights as ai_service
-import services.chat as chat_service
 
 router = APIRouter(tags=["ai_insights"])
 
@@ -51,12 +50,3 @@ async def get_recommendations(
     filters: AnalyticsFilters = Depends(get_validated_filters),
 ):
     return await ai_service.get_recommendations(ctx, db, insightId, filters)
-
-
-@router.post("/api/chat", response_model=ChatResponse)
-async def post_chat(
-    body: ChatRequest,
-    ctx: UserContext = Depends(get_live_user),
-    db: asyncpg.Connection = Depends(get_db_conn),
-):
-    return await chat_service.get_chat_answer(ctx, db, body.question)

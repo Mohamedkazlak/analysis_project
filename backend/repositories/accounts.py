@@ -17,6 +17,7 @@ async def load_auth_scope(db: asyncpg.Connection, user_id: str) -> AuthScope:
           u.person_id,
           u.scope_id,
           u.student_id,
+          u.is_active,
           p.full_name AS name,
           st.title AS staff_title,
           o.level::text AS scope_level,
@@ -37,7 +38,7 @@ async def load_auth_scope(db: asyncpg.Connection, user_id: str) -> AuthScope:
         """,
         user_id,
     )
-    if not row:
+    if not row or row["is_active"] is not True:
         raise HTTPException(status_code=401, detail="Account not found")
 
     role = row["role"]
@@ -298,7 +299,8 @@ async def _assert_hierarchy(
             )
         if scope.role == "professor" and filters.professor_id != scope.person_id:
             raise HTTPException(
-                status_code=403, detail="Professor filter is outside your teaching scope"
+                status_code=403,
+                detail="Professor filter is outside your teaching scope",
             )
         if filters.student_id:
             enrolled = await db.fetchrow(

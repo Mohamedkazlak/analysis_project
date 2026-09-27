@@ -58,6 +58,12 @@ def _psql(url: str, *args: str, sql: str | None = None) -> subprocess.CompletedP
 
 
 def _require_admin() -> None:
+    host = (urlparse(ADMIN_URL).hostname or "").lower()
+    if host not in {"localhost", "127.0.0.1", "::1"}:
+        pytest.skip(
+            "Integration tests only run against local PostgreSQL. "
+            f"Refusing host {host}."
+        )
     result = _psql(ADMIN_URL, "-c", "SELECT 1")
     if result.returncode != 0:
         pytest.skip(f"PostgreSQL not available: {result.stderr.strip()}")
@@ -421,6 +427,10 @@ def test_migrated_schema_matches_fresh_curriculum_and_org_policy(fresh_db, migra
         "014",
         "015",
         "016",
+        "019",
+        "020",
+        "021",
+        "022",
     ]
     sector_col = asyncio.run(
         _fetch(
@@ -493,8 +503,13 @@ def test_migration_runner_skips_already_applied(migrated_db):
     )
     assert "skip 014_professor_staff_isolation.sql (already applied)" in runner.stdout
     assert "skip 015_exam_attempts_section.sql (already applied)" in runner.stdout
+    assert "skip 016_ai_insights_attempt_scale.sql (already applied)" in runner.stdout
+    assert "skip 019_api_key_login_and_rag_audit.sql (already applied)" in runner.stdout
+    assert "skip 020_api_keys_allow_rotation.sql (already applied)" in runner.stdout
+    assert "skip 021_password_and_api_key_login.sql (already applied)" in runner.stdout
     assert (
-        "skip 016_ai_insights_attempt_scale.sql (already applied)" in runner.stdout
+        "skip 022_password_login_without_client_key.sql (already applied)"
+        in runner.stdout
     )
     assert not any(line.startswith("applied ") for line in runner.stdout.splitlines())
 
@@ -754,7 +769,11 @@ def test_migration_010_backfills_unmarked_syn_transc_via_runner():
           ('013', '013_rls_initplan_visibility_sets.sql'),
           ('014', '014_professor_staff_isolation.sql'),
           ('015', '015_exam_attempts_section.sql'),
-          ('016', '016_ai_insights_attempt_scale.sql');
+          ('016', '016_ai_insights_attempt_scale.sql'),
+          ('019', '019_api_key_login_and_rag_audit.sql'),
+          ('020', '020_api_keys_allow_rotation.sql'),
+          ('021', '021_password_and_api_key_login.sql'),
+          ('022', '022_password_login_without_client_key.sql');
         """,
     )
     if setup.returncode != 0:
@@ -829,8 +848,12 @@ def test_migration_010_backfills_unmarked_syn_transc_via_runner():
         "014",
         "015",
         "016",
+        "019",
+        "020",
+        "021",
+        "022",
     ]
-    assert recorded[-1]["filename"] == "016_ai_insights_attempt_scale.sql"
+    assert recorded[-1]["filename"] == "022_password_login_without_client_key.sql"
 
     _apply_file(url, ROOT / "db" / "migrations" / "010_syn_transc_marker_backfill.sql")
     reapplied = asyncio.run(
@@ -933,39 +956,110 @@ def test_rls_it_does_not_see_transcripts(fresh_db):
 
 
 def test_http_student_and_professor_scope(fresh_db):
+    import hashlib
+
     from core.config import settings
-    from core.security import get_password_hash
+    from core.security import create_access_token, decode_access_token
     from fastapi.testclient import TestClient
 
-    hashed = get_password_hash("test-pass")
+    student_key = "bnu_student_integration_key_0001"
+    professor_key = "bnu_professor_integration_key_001"
+    revoked_key = "bnu_student_revoked_integration_key"
+    expired_key = "bnu_student_expired_integration_key"
+    password = "integration-pass"
 
-    async def _set_passwords():
+    def _hash(raw: str) -> str:
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    async def _prepare_keys():
         import asyncpg
 
         conn = await asyncpg.connect(fresh_db)
         try:
+            await conn.execute("UPDATE user_accounts SET is_active = true")
+            from core.security import get_password_hash
+
+            password_hash = get_password_hash(password)
             await conn.execute(
-                "UPDATE user_accounts SET password_hash = $1",
-                hashed,
+                """
+                UPDATE user_accounts
+                SET password_hash = $2
+                WHERE id = ANY($1::text[])
+                """,
+                ["u-student", "u-prof-cs", "u-president"],
+                password_hash,
+            )
+            await conn.execute(
+                """
+                INSERT INTO api_keys (id, user_id, key_prefix, key_hash, is_active, label)
+                VALUES
+                  ('k-student', 'u-student', $1, $2, true, 'integration'),
+                  ('k-professor', 'u-prof-cs', $3, $4, true, 'integration'),
+                  ('k-revoked', 'u-student', $5, $6, false, 'integration-revoked'),
+                  ('k-expired', 'u-student', $7, $8, true, 'integration-expired'),
+                  ('k-president', 'u-president', $9, $10, false, 'integration-revoked')
+                """,
+                student_key[:12],
+                _hash(student_key),
+                professor_key[:12],
+                _hash(professor_key),
+                revoked_key[:12],
+                _hash(revoked_key),
+                expired_key[:12],
+                _hash(expired_key),
+                "bnu_president"[:12],
+                _hash("bnu_president_revoked_key_0001"),
+            )
+            await conn.execute(
+                """
+                UPDATE api_keys
+                SET revoked_at = now()
+                WHERE id IN ('k-revoked', 'k-president')
+                """
+            )
+            await conn.execute(
+                """
+                UPDATE api_keys
+                SET expires_at = now() - interval '1 day'
+                WHERE id = 'k-expired'
+                """
             )
         finally:
             await conn.close()
 
-    asyncio.run(_set_passwords())
+    asyncio.run(_prepare_keys())
     settings.DATABASE_URL = _app_url(FRESH_DB)
     settings.APP_ENV = "test"
     from main import app
 
     with TestClient(app) as client:
-        denied = client.post(
-            "/auth/login", json={"id": "u-student", "password": "wrong"}
+        assert (
+            client.post(
+                "/auth/login",
+                json={"id": "u-president", "password": password},
+            ).status_code
+            == 401
         )
-        assert denied.status_code == 401
+        assert (
+            client.post(
+                "/auth/login",
+                json={"id": "u-student", "password": "wrong-password"},
+            ).status_code
+            == 401
+        )
         login = client.post(
-            "/auth/login", json={"id": "u-student", "password": "test-pass"}
+            "/auth/login",
+            json={"id": "u-student", "password": password},
         )
         assert login.status_code == 200, login.text
-        headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+        body = login.json()
+        assert body["token_type"] == "bearer"
+        assert body["user"]["user_id"] == "u-student"
+        assert body["user"]["role"] == "student"
+        payload = decode_access_token(body["access_token"])
+        assert payload["user_id"] == "u-student"
+        assert "role" not in payload
+        headers = {"Authorization": f"Bearer {body['access_token']}"}
         assert client.get("/api/student-dashboard", headers=headers).status_code == 200
         assert (
             client.get(
@@ -987,8 +1081,50 @@ def test_http_student_and_professor_scope(fresh_db):
             == 403
         )
 
+        async def _deactivate():
+            import asyncpg
+
+            conn = await asyncpg.connect(fresh_db)
+            try:
+                await conn.execute(
+                    "UPDATE user_accounts SET is_active = false WHERE id = 'u-student'"
+                )
+            finally:
+                await conn.close()
+
+        asyncio.run(_deactivate())
+        assert (
+            client.post(
+                "/auth/login",
+                json={"id": "u-student", "password": password},
+            ).status_code
+            == 401
+        )
+        unknown = client.get(
+            "/auth/me",
+            headers={
+                "Authorization": "Bearer "
+                + create_access_token({"user_id": "does-not-exist"})
+            },
+        )
+        assert unknown.status_code == 401
+
+        async def _reactivate():
+            import asyncpg
+
+            conn = await asyncpg.connect(fresh_db)
+            try:
+                await conn.execute(
+                    "UPDATE user_accounts SET is_active = true WHERE id = 'u-student'"
+                )
+            finally:
+                await conn.close()
+
+        asyncio.run(_reactivate())
+
         prof = client.post(
-            "/auth/login", json={"id": "u-prof-cs", "password": "test-pass"}
+            "/auth/login",
+            json={"id": "u-prof-cs", "password": password},
         )
         assert prof.status_code == 200
         pheaders = {"Authorization": f"Bearer {prof.json()['access_token']}"}

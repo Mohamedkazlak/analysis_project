@@ -1,11 +1,7 @@
 import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  ROLE_SLUG,
-  getActiveDemoRole,
-  roleHome,
-} from "@/lib/auth/role-guards";
-import { setAuthToken } from "@/lib/auth/token";
+import { ROLE_SLUG, ensureActiveRole, roleHome } from "@/lib/auth/role-guards";
+import { rememberSessionRole, setAuthToken } from "@/lib/auth/token";
 import { BACKEND_URL } from "@/lib/api";
 
 const DEMO_ACCOUNT_GROUPS = [
@@ -150,9 +146,9 @@ const DEMO_ACCOUNT_GROUPS = [
 ] as const;
 
 export const Route = createFileRoute("/login")({
-  beforeLoad: () => {
+  beforeLoad: async () => {
     if (typeof window === "undefined") return;
-    const role = getActiveDemoRole();
+    const role = await ensureActiveRole();
     if (role) {
       throw redirect({ to: "/$role", params: { role: ROLE_SLUG[role] } });
     }
@@ -168,10 +164,14 @@ function Login() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const role = getActiveDemoRole();
-    if (role) {
+    let cancelled = false;
+    void ensureActiveRole().then((role) => {
+      if (cancelled || !role) return;
       void navigate({ to: "/$role", params: { role: ROLE_SLUG[role] } });
-    }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -196,18 +196,22 @@ function Login() {
       const meRes = await fetch(`${BACKEND_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${data.access_token}` },
       });
+      if (!meRes.ok) {
+        throw new Error("Invalid credentials");
+      }
       const me = await meRes.json();
 
       const role = me.role as keyof typeof ROLE_SLUG;
-      const targetRoute = ROLE_SLUG[role]
-        ? roleHome(role)
-        : "/student";
+      if (!ROLE_SLUG[role]) {
+        throw new Error("This account has no dashboard");
+      }
+      rememberSessionRole(me.user_id, role);
       // Full navigation (not the SPA `navigate()`) so RoleProvider remounts
       // and re-reads the freshly-written token. RoleProvider's sync effect
       // only re-checks the token when its own derived role/user state
       // changes, so a client-side transition right after login would keep
       // showing the previous (default) role's nav until a manual reload.
-      window.location.href = targetRoute;
+      window.location.href = roleHome(role);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -230,7 +234,8 @@ function Login() {
                 Sign in
               </h1>
               <p className="mt-2 text-sm text-gray-600">
-                BNU Analytics Dashboard
+                Sign in with your user ID and password. You are sent to the
+                dashboard for that account.
               </p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -244,6 +249,7 @@ function Login() {
                   onChange={(e) => setId(e.target.value)}
                   className="mt-2 block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
                   placeholder="e.g. u-president"
+                  autoComplete="username"
                 />
               </div>
               <div>
@@ -255,6 +261,7 @@ function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="mt-2 block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                  autoComplete="current-password"
                 />
               </div>
               {error && <p className="text-sm text-red-600">{error}</p>}
@@ -272,6 +279,10 @@ function Login() {
             <h3 className="mb-3 text-sm font-medium text-gray-900">
               Demo Accounts
             </h3>
+            <p className="mb-3 text-xs text-gray-500">
+              Each account opens its own dashboard. Use that account&apos;s
+              password.
+            </p>
             <div className="space-y-4 text-xs text-gray-600">
               {DEMO_ACCOUNT_GROUPS.map((group) => (
                 <div key={group.heading}>
@@ -287,9 +298,11 @@ function Login() {
                   </div>
                   <div className="space-y-1.5">
                     {group.accounts.map((account) => (
-                      <div
+                      <button
                         key={account.id}
-                        className="flex items-start justify-between gap-3"
+                        type="button"
+                        onClick={() => setId(account.id)}
+                        className="flex w-full items-start justify-between gap-3 rounded-md px-1 py-0.5 text-left hover:bg-gray-50"
                       >
                         <div className="min-w-0">
                           <span className="font-semibold text-gray-900">
@@ -300,7 +313,7 @@ function Login() {
                         <p className="shrink-0 text-right text-gray-500">
                           {account.title}
                         </p>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>

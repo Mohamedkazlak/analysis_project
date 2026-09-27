@@ -1,9 +1,12 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { getActiveDemoRole, ROLE_SLUG } from "@/lib/auth/role-guards";
+import { ensureActiveRole, ROLE_SLUG } from "@/lib/auth/role-guards";
 
 export const Route = createFileRoute("/")({
-  beforeLoad: () => {
-    const role = getActiveDemoRole();
+  beforeLoad: async () => {
+    if (typeof window === "undefined") {
+      throw redirect({ to: "/login" });
+    }
+    const role = await ensureActiveRole();
     if (!role) {
       throw redirect({ to: "/login" });
     }

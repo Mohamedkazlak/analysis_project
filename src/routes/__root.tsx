@@ -16,7 +16,7 @@ import { RoleProvider } from "@/components/role-context";
 import { AnalyticsFilterProvider } from "@/components/dashboard/analytics-filter-context";
 import { AppShell } from "@/components/app-shell";
 import {
-  getActiveDemoRole,
+  ensureActiveRole,
   legacyRedirectTo,
   roleNavigateTarget,
 } from "@/lib/auth/role-guards";
@@ -88,12 +88,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     search: {
       middlewares: [stripSearchParams(FILTER_SEARCH_DEFAULTS)],
     },
-    beforeLoad: ({ location }) => {
+    beforeLoad: async ({ location }) => {
       if (location.pathname === "/login") return;
       // localStorage is only available in the browser. Skip on SSR so a
       // successful login is not bounced back to /login during hydration.
       if (typeof window === "undefined") return;
-      const role = getActiveDemoRole();
+      const role = await ensureActiveRole();
       if (!role) {
         throw redirect({ to: "/login" });
       }

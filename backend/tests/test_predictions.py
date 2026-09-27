@@ -12,8 +12,18 @@ def test_management_output_is_current_standing_not_a_forecast():
     data = {
         "overview": {
             "passRateByCollege": [
-                {"college": "Engineering", "passRate": 72, "participants": 80, "courses": 4},
-                {"college": "Business", "passRate": 64, "participants": 50, "courses": 3},
+                {
+                    "college": "Engineering",
+                    "passRate": 72,
+                    "participants": 80,
+                    "courses": 4,
+                },
+                {
+                    "college": "Business",
+                    "passRate": 64,
+                    "participants": 50,
+                    "courses": 3,
+                },
             ]
         }
     }
@@ -27,6 +37,31 @@ def test_management_output_is_current_standing_not_a_forecast():
 
 def test_empty_scope_returns_nothing_rather_than_inventing_numbers():
     assert current_standing_from_context("senior_management", {"overview": {}}) is None
+    assert current_standing_from_context("student", {"dashboard": {}}) is None
+    assert current_standing_from_context("professor", {"courses": {}}) is None
+
+
+def test_student_and_professor_standing_use_recorded_scores_only():
+    student = current_standing_from_context(
+        "student",
+        {"dashboard": {"average": 71, "classAverage": 68}},
+    )
+    assert student["kind"] == "current_standing"
+    assert student["rows"][0]["value"] == "71"
+    assert "forecast" not in student["title"].lower()
+    professor = current_standing_from_context(
+        "professor",
+        {
+            "courses": {
+                "sections": [
+                    {"section": "A", "average": 80, "passRate": 90},
+                    {"section": "B", "average": 62, "passRate": 70},
+                ]
+            }
+        },
+    )
+    assert professor["rows"][0]["label"] == "B"
+    assert "62" in professor["rows"][0]["value"]
 
 
 def test_offering_year_count_is_scoped_not_global():

@@ -221,6 +221,7 @@ create table if not exists user_accounts (
   student_id text references students (id) on delete set null,
   password_hash text,
   is_demo boolean not null default false,
+  is_active boolean not null default true,
   created_at timestamptz not null default now(),
   unique (person_id, role),
   constraint user_accounts_student_role check (
@@ -235,6 +236,50 @@ create index if not exists user_accounts_role_idx on user_accounts (role);
 create index if not exists user_accounts_student_id_idx
   on user_accounts (student_id)
   where student_id is not null;
+
+-- Login secrets. role/scope columns are not authoritative; user_accounts is.
+create table if not exists api_keys (
+  id text primary key default gen_random_uuid()::text,
+  user_id text references user_accounts (id) on delete cascade,
+  key_prefix text not null,
+  key_hash text not null unique,
+  label text,
+  is_active boolean not null default true,
+  expires_at timestamptz,
+  revoked_at timestamptz,
+  last_used_at timestamptz,
+  created_at timestamptz not null default now(),
+  role app_role,
+  scope_id text references org_units (id),
+  person_id text references people (id),
+  student_id text references students (id)
+);
+
+create index if not exists api_keys_user_id_idx on api_keys (user_id);
+drop index if exists api_keys_user_id_key;
+
+comment on table api_keys is
+  'API key login. Only key_hash is stored. Role and scope are read from user_accounts.';
+
+create table if not exists chat_query_log (
+  id bigint generated always as identity primary key,
+  user_id text references user_accounts (id) on delete set null,
+  api_key_id text references api_keys (id) on delete set null,
+  role app_role not null,
+  question text not null,
+  generated_sql text,
+  row_count integer,
+  error_message text,
+  latency_ms integer,
+  model text,
+  success boolean,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists chat_query_log_user_id_idx on chat_query_log (user_id);
+
+alter table api_keys enable row level security;
+alter table chat_query_log enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Curriculum
@@ -579,6 +624,9 @@ begin
     return null;
   end if;
   rec.password_hash := null;
+  if rec.is_active is not true then
+    return null;
+  end if;
   return rec;
 end;
 $$;
@@ -1230,7 +1278,7 @@ comment on table enrollments is 'A student may sit an exam only through an enrol
 comment on table exam_attempts is 'Roster row per enrollment × exam; status=absent means no sitting.';
 comment on table transcript_entries is 'Closed academic-year grades when live exam rows are not kept.';
 comment on column exams.is_synthetic is 'True for generated demo assessment rows; false for imported university records.';
-comment on function current_app_account() is 'Reads app.current_user_id (user_accounts.id). Password hash is never returned. Set in the API session.';
+comment on function current_app_account() is 'Reads app.current_user_id (user_accounts.id). Password hash is never returned. Inactive accounts are not visible. Set in the API session.';
 comment on function student_is_visible(text) is 'Whether the session role may see this student row.';
 comment on function course_is_visible(text) is 'Whether the session role may see this course row.';
 comment on function org_unit_is_visible(text) is
@@ -1298,6 +1346,189 @@ as $$
   group by a.exam_id;
 $$;
 
+create or replace function authenticate_api_key(p_key_hash text)
+returns table (user_id text)
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  key_row api_keys;
+  acct user_accounts;
+begin
+  if p_key_hash is null or length(p_key_hash) <> 64 then
+    return;
+  end if;
+  select * into key_row
+  from api_keys
+  where key_hash = p_key_hash;
+  if not found
+     or key_row.is_active is not true
+     or key_row.revoked_at is not null
+     or key_row.user_id is null
+     or (key_row.expires_at is not null and key_row.expires_at <= now()) then
+    return;
+  end if;
+  select * into acct from user_accounts where id = key_row.user_id;
+  if not found or acct.is_active is not true then
+    return;
+  end if;
+  update api_keys set last_used_at = now() where id = key_row.id;
+  return query select acct.id;
+end;
+$$;
+
+create or replace function account_password_for_key(p_user_id text, p_key_hash text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  key_row api_keys;
+  acct user_accounts;
+begin
+  if p_user_id is null or btrim(p_user_id) = ''
+     or p_key_hash is null or length(p_key_hash) <> 64 then
+    return null;
+  end if;
+  select * into key_row from api_keys where key_hash = p_key_hash;
+  if not found
+     or key_row.user_id is distinct from p_user_id
+     or key_row.is_active is not true
+     or key_row.revoked_at is not null
+     or (key_row.expires_at is not null and key_row.expires_at <= now()) then
+    return null;
+  end if;
+  select * into acct from user_accounts where id = p_user_id;
+  if not found or acct.is_active is not true or acct.password_hash is null then
+    return null;
+  end if;
+  return acct.password_hash;
+end;
+$$;
+
+create or replace function account_password_for_login(p_user_id text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  acct user_accounts;
+begin
+  if p_user_id is null or btrim(p_user_id) = '' then
+    return null;
+  end if;
+  select * into acct from user_accounts where id = p_user_id;
+  if not found or acct.is_active is not true or acct.password_hash is null then
+    return null;
+  end if;
+  if not exists (
+    select 1
+    from api_keys
+    where user_id = p_user_id
+      and is_active is true
+      and revoked_at is null
+      and (expires_at is null or expires_at > now())
+  ) then
+    return null;
+  end if;
+  return acct.password_hash;
+end;
+$$;
+
+create or replace function record_password_login(p_user_id text)
+returns table (user_id text)
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  acct user_accounts;
+  key_id text;
+begin
+  if p_user_id is null or btrim(p_user_id) = '' then
+    return;
+  end if;
+  select * into acct from user_accounts where id = p_user_id;
+  if not found or acct.is_active is not true or acct.password_hash is null then
+    return;
+  end if;
+  select k.id into key_id
+  from api_keys k
+  where k.user_id = p_user_id
+    and k.is_active is true
+    and k.revoked_at is null
+    and (k.expires_at is null or k.expires_at > now())
+  order by k.created_at desc
+  limit 1;
+  if key_id is null then
+    return;
+  end if;
+  update api_keys set last_used_at = now() where id = key_id;
+  return query select acct.id;
+end;
+$$;
+
+create or replace function log_chat_query(
+  p_user_id text,
+  p_role text,
+  p_question text,
+  p_generated_sql text,
+  p_row_count integer,
+  p_error_message text,
+  p_latency_ms integer,
+  p_model text,
+  p_success boolean
+) returns void
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  session_uid text;
+begin
+  session_uid := nullif(current_setting('app.current_user_id', true), '');
+  if session_uid is null or session_uid is distinct from p_user_id then
+    raise exception 'chat log rejected';
+  end if;
+  if not exists (
+    select 1 from user_accounts where id = p_user_id and is_active
+  ) then
+    raise exception 'chat log rejected';
+  end if;
+  insert into chat_query_log (
+    user_id, role, question, generated_sql, row_count, error_message,
+    latency_ms, model, success
+  ) values (
+    p_user_id,
+    p_role::app_role,
+    left(coalesce(p_question, ''), 2000),
+    left(p_generated_sql, 4000),
+    p_row_count,
+    left(p_error_message, 500),
+    p_latency_ms,
+    left(p_model, 100),
+    p_success
+  );
+end;
+$$;
+
+comment on function authenticate_api_key(text) is
+  'Login by key hash. Unbound, revoked, expired, and inactive keys return no row.';
+comment on function account_password_for_login(text) is
+  'Password hash for an active account that has an active API key. The client does not send the key.';
+comment on function record_password_login(text) is
+  'After a successful password check, stamps last_used_at on that account''s newest active API key.';
+comment on function log_chat_query(text, text, text, text, integer, text, integer, text, boolean) is
+  'Inserts one chat audit row for the session user. Does not store result rows.';
+
 -- ---------------------------------------------------------------------------
 -- Application role, FORCE RLS, grants
 -- app_user is the recommended least-privilege LOGIN role. This script does
@@ -1317,6 +1548,10 @@ $$;
 grant usage on schema public to app_user;
 grant select on all tables in schema public to app_user;
 revoke insert, update, delete on all tables in schema public from app_user;
+revoke all on table api_keys from app_user;
+revoke all on table chat_query_log from app_user;
+revoke all on table api_keys from public;
+revoke all on table chat_query_log from public;
 alter default privileges in schema public grant select on tables to app_user;
 
 alter table org_units force row level security;
@@ -1338,6 +1573,8 @@ alter table exam_attempts force row level security;
 alter table attempt_answers force row level security;
 alter table integrity_flags force row level security;
 alter table transcript_entries force row level security;
+alter table api_keys force row level security;
+alter table chat_query_log force row level security;
 
 revoke all on function org_descendants(text) from public;
 revoke all on function current_app_account() from public;
@@ -1361,6 +1598,11 @@ revoke all on function attempt_is_visible(text) from public;
 revoke all on function exam_class_average(text) from public;
 revoke all on function get_user_for_login(text) from public;
 revoke all on function get_exam_averages(text[]) from public;
+revoke all on function authenticate_api_key(text) from public;
+revoke all on function account_password_for_key(text, text) from public;
+revoke all on function account_password_for_login(text) from public;
+revoke all on function record_password_login(text) from public;
+revoke all on function log_chat_query(text, text, text, text, integer, text, integer, text, boolean) from public;
 
 grant execute on function org_descendants(text) to app_user;
 grant execute on function current_app_account() to app_user;
@@ -1382,8 +1624,12 @@ grant execute on function exam_is_visible(text) to app_user;
 grant execute on function exam_attempt_is_visible(text, text) to app_user;
 grant execute on function attempt_is_visible(text) to app_user;
 grant execute on function exam_class_average(text) to app_user;
-grant execute on function get_user_for_login(text) to app_user;
 grant execute on function get_exam_averages(text[]) to app_user;
+grant execute on function authenticate_api_key(text) to app_user;
+grant execute on function account_password_for_key(text, text) to app_user;
+grant execute on function account_password_for_login(text) to app_user;
+grant execute on function record_password_login(text) to app_user;
+grant execute on function log_chat_query(text, text, text, text, integer, text, integer, text, boolean) to app_user;
 
 do $$
 declare
@@ -1411,7 +1657,12 @@ declare
     'attempt_is_visible(text)',
     'exam_class_average(text)',
     'get_user_for_login(text)',
-    'get_exam_averages(text[])'
+    'get_exam_averages(text[])',
+    'authenticate_api_key(text)',
+    'account_password_for_key(text, text)',
+    'account_password_for_login(text)',
+    'record_password_login(text)',
+    'log_chat_query(text, text, text, text, integer, text, integer, text, boolean)'
   ];
 begin
   foreach api_role in array array['anon', 'authenticated'] loop
@@ -1419,6 +1670,24 @@ begin
       foreach fn in array sigs loop
         execute format('revoke all on function %s from %I', fn, api_role);
       end loop;
+    end if;
+  end loop;
+end $$;
+
+do $$
+declare
+  api_role text;
+begin
+  foreach api_role in array array['anon', 'authenticated', 'service_role'] loop
+    if exists (select 1 from pg_roles where rolname = api_role) then
+      execute format(
+        'revoke all on function public.account_password_for_login(text) from %I',
+        api_role
+      );
+      execute format(
+        'revoke all on function public.record_password_login(text) from %I',
+        api_role
+      );
     end if;
   end loop;
 end $$;

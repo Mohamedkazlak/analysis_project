@@ -19,6 +19,7 @@ from routers import (
     student,
     ai_insights,
     filter_options,
+    rag,
 )
 
 
@@ -55,3 +56,4 @@ app.include_router(directory.router)
 app.include_router(student.router)
 app.include_router(ai_insights.router)
 app.include_router(filter_options.router)
+app.include_router(rag.router)

@@ -8,12 +8,14 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { DemoUser, Role, UserAffiliation, ViewerScope } from "@/lib/types";
-import { roleHome } from "@/lib/auth/role-guards";
+import { roleHome, ROLE_SLUG, SLUG_ROLE } from "@/lib/auth/role-guards";
 import { useRouterState } from "@tanstack/react-router";
 import {
   getAuthToken,
+  rememberSessionRole,
   roleFromToken,
   scopeIdFromToken,
+  sessionRoleForToken,
   studentIdFromToken,
   userIdFromToken,
 } from "@/lib/auth/token";
@@ -323,7 +325,7 @@ interface RoleContextValue {
 
 function userFromToken(token: string | null): DemoUser | null {
   const userId = userIdFromToken(token);
-  const role = roleFromToken(token);
+  const role = roleFromToken(token) ?? sessionRoleForToken(token);
   if (!userId || !role) return null;
   const scopeId = scopeIdFromToken(token);
   const studentId = studentIdFromToken(token);
@@ -422,6 +424,19 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     enabled: Boolean(tokenUser?.id),
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    const me = meQuery.data;
+    if (!me?.user_id || !me.role) return;
+    rememberSessionRole(me.user_id, me.role);
+    if (pathname === "/login") return;
+    const slug = pathname.split("/").filter(Boolean)[0];
+    if (!slug || !SLUG_ROLE[slug]) return;
+    const expected = ROLE_SLUG[me.role as Role];
+    if (expected && slug !== expected) {
+      window.location.replace(roleHome(me.role as Role));
+    }
+  }, [meQuery.data, pathname]);
 
   const user = meQuery.data
     ? userFromMe(meQuery.data)

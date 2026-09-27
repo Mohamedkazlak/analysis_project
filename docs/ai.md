@@ -1,7 +1,7 @@
 # AI layer
 
-The AI UI is a **deterministic narrative** over real repository numbers. It
-does not call an LLM and must not invent statistics.
+Dashboard numbers are deterministic. The model may explain them, and it may
+draft a chat query, but it does not invent metrics, warnings, or permissions.
 
 ## Request path
 
@@ -77,8 +77,12 @@ version. The cache is not a security boundary.
 
 ## Limitations
 
-- Template text, not generative AI.
+- Dashboard KPIs and warning rules are deterministic. The model does not
+  create them.
+- Optional narrative rephrasing (`AI_NARRATIVE_ENABLED`) is discarded when it
+  introduces a number that was not in the metrics.
+- Chat (`POST /api/chat`) can call an OpenAI-compatible model. SQL is
+  validated and scoped before execution. Empty results are reported as empty.
 - In-process cache only (single instance, bounded eviction).
 - Integrity “risk scores” are fused from recorded signals, not a trained model.
-- Unit tests mock repositories; CI integration tests cover schema/RLS, not
-  production LLM latency (there is no LLM).
+- Unit tests mock the model. They do not measure production model latency.

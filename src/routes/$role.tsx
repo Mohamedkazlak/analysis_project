@@ -9,6 +9,7 @@ import {
 import {
   ROLE_SLUG,
   SLUG_ROLE,
+  ensureActiveRole,
   getActiveDemoRole,
   legacyRedirectTo,
   roleHome,
@@ -16,9 +17,9 @@ import {
 } from "@/lib/auth/role-guards";
 
 export const Route = createFileRoute("/$role")({
-  beforeLoad: ({ params, location }) => {
+  beforeLoad: async ({ params, location }) => {
     if (typeof window === "undefined") return;
-    const role = getActiveDemoRole();
+    const role = await ensureActiveRole();
     if (!role) {
       throw redirect({ to: "/login" });
     }

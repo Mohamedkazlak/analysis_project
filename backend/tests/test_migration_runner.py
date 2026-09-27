@@ -82,4 +82,8 @@ def test_repo_migrations_have_unique_padded_versions():
         "014",
         "015",
         "016",
+        "019",
+        "020",
+        "021",
+        "022",
     ]

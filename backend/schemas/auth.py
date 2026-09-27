@@ -8,9 +8,25 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class SessionProfile(BaseModel):
+    """Display fields for the client. Later requests reload role and scope."""
+
+    user_id: str
+    role: str
+    display_role: Optional[str] = None
+    name: Optional[str] = None
+    scope_level: Optional[str] = None
+    scope_label: Optional[str] = None
+    sector_id: Optional[str] = None
+    college_id: Optional[str] = None
+    student_id: Optional[str] = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str
+    expires_in: int
+    user: SessionProfile
 
 
 class AssignedCourse(BaseModel):

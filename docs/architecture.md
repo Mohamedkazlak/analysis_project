@@ -65,12 +65,13 @@ the limit is not a security control.
 
 ## AI layer
 
-AI is a deterministic template layer over the same filtered repositories. It
-does not call an LLM. Insights, current standing and recommendations share one
-`load_ai_context` pass (`POST /api/ai/decision`). Dashboard KPI queries do not
-wait for that request.
+Dashboard KPIs are repository queries. Insights, warnings, and current
+standing are computed from those numbers. `POST /api/chat` is a separate RAG
+path: the model may draft SQL, the API validates and scopes it, and RLS
+runs it. The model explains authorized rows. It does not choose permissions
+or invent metrics.
 
-See `docs/ai.md`.
+See `docs/ai.md` and `backend/README.md`.
 
 ## Caching
 

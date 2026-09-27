@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta
 
 import bcrypt
@@ -20,6 +21,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(password_bytes, hashed_bytes)
     except (ValueError, TypeError):
         return False
+
+
+def hash_api_key(raw_key: str) -> str:
+    """SHA-256 hex digest. The raw key is never stored."""
+    return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
 
 def get_password_hash(password: str) -> str:

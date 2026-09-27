@@ -16,6 +16,7 @@ from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 from services import ai_cache
 from services.ai_context import load_ai_context
+from rag.narrative import apply_llm_narratives
 from services.predictions import get_standing_or_forecast
 
 
@@ -567,13 +568,15 @@ async def _compute_decision(
     insight = _insight_from_context(ctx.role, data)
     prediction = await get_standing_or_forecast(ctx, db, filters, data)
     recommendations = _recommendations_from_context(ctx.role, data, insight_id)
-    return {
-        "insight": insight,
-        "prediction": prediction,
-        "recommendations": recommendations,
-        "status": "ok",
-        "message": None,
-    }
+    return await apply_llm_narratives(
+        {
+            "insight": insight,
+            "prediction": prediction,
+            "recommendations": recommendations,
+            "status": "ok",
+            "message": None,
+        }
+    )
 
 
 async def get_ai_decision(

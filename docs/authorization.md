@@ -8,28 +8,34 @@ Two boundaries must agree:
    pooled connection (`backend/db/pool.py`)
 
 ```text
-JWT
+JWT (user id only)
  → live user_accounts lookup
- → role + scope
+ → role + scope + assignment
  → application filter validation
- → repository query
+ → repository query or guarded RAG SQL
  → PostgreSQL RLS
 ```
+
+Login is `POST /auth/login` with the account id and password. The password is
+verified against `user_accounts`. The account must have an active `api_keys`
+row for that `user_id`; the client does not send the key. The JWT is not the
+authorization record. `get_live_user`
+reloads the account on every request, and an inactive account fails closed.
 
 Hiding a control in React is not authorization. The in-process AI cache is
 also not a security boundary.
 
 ## Roles
 
-| Account | `user_accounts.role` | Typical `org_units.level` | UI filters | Org metadata visible via RLS |
-| --- | --- | --- | --- | --- |
-| University senior management | `senior_management` | `university` | Sector, College, Professor (all optional; Curricula requires college + professor) | University, all sectors, all colleges |
-| Sector dean | `senior_management` | `sector` | College, Professor (locked to own sector) | University, own sector, colleges in that sector |
-| Program director | `program_director` | `program` | Curriculum, Professor, Student (locked to own college) | University, parent sector, own college |
-| Academic affairs | `academic_affairs` | `program` | Same as program director | Same as program director |
-| Professor | `professor` | n/a | Curriculum, Student (assigned courses only) | University plus sector/college of assigned curricula. Other faculty rows are hidden. |
-| Academic integrity | `it_academic_integrity` | university | Sector, College, Curriculum | University-wide exam metadata for monitoring |
-| Student | `student` | n/a | none (own record only) | University, own college, parent sector |
+| Account                      | `user_accounts.role`    | Typical `org_units.level` | UI filters                                                                        | Org metadata visible via RLS                                                         |
+| ---------------------------- | ----------------------- | ------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| University senior management | `senior_management`     | `university`              | Sector, College, Professor (all optional; Curricula requires college + professor) | University, all sectors, all colleges                                                |
+| Sector dean                  | `senior_management`     | `sector`                  | College, Professor (locked to own sector)                                         | University, own sector, colleges in that sector                                      |
+| Program director             | `program_director`      | `program`                 | Curriculum, Professor, Student (locked to own college)                            | University, parent sector, own college                                               |
+| Academic affairs             | `academic_affairs`      | `program`                 | Same as program director                                                          | Same as program director                                                             |
+| Professor                    | `professor`             | n/a                       | Curriculum, Student (assigned courses only)                                       | University plus sector/college of assigned curricula. Other faculty rows are hidden. |
+| Academic integrity           | `it_academic_integrity` | university                | Sector, College, Curriculum                                                       | University-wide exam metadata for monitoring                                         |
+| Student                      | `student`               | n/a                       | none (own record only)                                                            | University, own college, parent sector                                               |
 
 Role and scope are loaded from `user_accounts` on every request
 (`get_live_user`). A JWT that claims a different role is ignored.

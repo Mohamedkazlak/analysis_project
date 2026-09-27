@@ -43,13 +43,22 @@ class Settings(BaseModel):
     DATABASE_ADMIN_URL: str = os.getenv("DATABASE_ADMIN_URL", "")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "")
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRY_MINUTES: int = int(os.getenv("JWT_EXPIRY_MINUTES", "480"))
+    JWT_EXPIRY_MINUTES: int = int(os.getenv("JWT_EXPIRY_MINUTES", "60"))
     CORS_ORIGINS: str = os.getenv(
         "CORS_ORIGINS",
         "http://localhost:5173,http://localhost:3000,http://localhost:8080,http://127.0.0.1:8080",
     )
     AI_BUDGET_SECONDS: float = float(os.getenv("AI_BUDGET_SECONDS", "8"))
     AI_CACHE_TTL_SECONDS: int = int(os.getenv("AI_CACHE_TTL_SECONDS", "60"))
+    AI_NARRATIVE_ENABLED: bool = os.getenv("AI_NARRATIVE_ENABLED", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "")
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 
     @property
     def cors_origins(self) -> list[str]:
