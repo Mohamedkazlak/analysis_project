@@ -24,6 +24,7 @@ __pycache__/
 .env.local
 .env.*.local
 *.local
+backend/.api-keys.local
 
 # Local docs (not published)
 API_AND_ROUTES.md
