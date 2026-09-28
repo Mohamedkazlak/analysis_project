@@ -59,6 +59,16 @@ class Settings(BaseModel):
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "")
     LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+    # Narration runs after the decision is already cached and served.
+    AI_NARRATIVE_TIMEOUT_SECONDS: float = float(
+        os.getenv("AI_NARRATIVE_TIMEOUT_SECONDS", "20")
+    )
+    AI_NARRATIVE_BACKGROUND_BUDGET_SECONDS: float = float(
+        os.getenv("AI_NARRATIVE_BACKGROUND_BUDGET_SECONDS", "90")
+    )
+    AI_NARRATIVE_MAX_CONCURRENCY: int = int(
+        os.getenv("AI_NARRATIVE_MAX_CONCURRENCY", "1")
+    )
 
     @property
     def cors_origins(self) -> list[str]:

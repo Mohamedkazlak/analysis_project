@@ -176,7 +176,7 @@ export const navByRole: Record<Role, { group: string; items: NavItem[] }[]> = {
         },
         {
           to: "/courses",
-          label: "Curricula",
+          label: "Curriculum",
           title: "Curriculum Performance",
         },
         {
@@ -203,7 +203,7 @@ export const navByRole: Record<Role, { group: string; items: NavItem[] }[]> = {
         },
         {
           to: "/courses",
-          label: "My Curricula",
+          label: "My Curriculum",
           title: "Curriculum Performance",
         },
         {

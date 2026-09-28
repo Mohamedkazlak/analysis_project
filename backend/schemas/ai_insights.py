@@ -97,6 +97,10 @@ class AiDecision(BaseModel):
     recommendations: Optional[RecommendationSet] = None
     status: Literal["ok", "timeout", "unavailable"] = "ok"
     message: Optional[str] = None
+    # "pending" while an LLM reword runs in the background; "done" once it
+    # lands or gives up; "skipped" when narration is off or there is nothing
+    # to reword.
+    narrationStatus: Literal["pending", "done", "skipped"] = "skipped"
 
 
 class ChatRequest(BaseModel):

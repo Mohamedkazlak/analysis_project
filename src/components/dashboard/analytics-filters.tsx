@@ -50,7 +50,7 @@ export function AnalyticsFilters() {
     })),
   ];
   const curriculumOptions = [
-    { value: "", label: "All curricula" },
+    { value: "", label: "All curriculum" },
     ...(options?.curricula ?? []).map((c) => ({
       value: c.id,
       label: `${c.code} · ${c.name}`,

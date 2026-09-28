@@ -197,17 +197,67 @@ export function examScoreRows(rows: ExamSummaryRow[]) {
     .sort((a, b) => a.avgScore - b.avgScore || a.course.localeCompare(b.course))
     .map((row) => ({
       ...row,
-      label: row.course,
+      label:
+        row.month && row.year
+          ? `${row.course} · ${row.month} ${row.year}`
+          : row.course,
       passRate: row.sittings
         ? Math.round((row.passed / row.sittings) * 1000) / 10
         : 0,
     }));
 }
 
+/** Latest month compared with the month before it in the visible series. */
+export function monthExamChange(rows: ActivityChartPoint[]): {
+  label: string;
+  value: string;
+  sub: string;
+  tone: "ink" | "mint" | "rose";
+  sentence: string | null;
+} {
+  const last = rows[rows.length - 1];
+  if (!last) {
+    return {
+      label: "Change from previous month",
+      value: "—",
+      sub: "No exams in this view",
+      tone: "ink",
+      sentence: null,
+    };
+  }
+  if (rows.length < 2) {
+    return {
+      label: "Exams this month",
+      value: last.exams.toLocaleString(),
+      sub: last.label,
+      tone: "ink",
+      sentence: null,
+    };
+  }
+  const prev = rows[rows.length - 2];
+  const delta = last.exams - prev.exams;
+  const countLabel = `${Math.abs(delta)} ${Math.abs(delta) === 1 ? "exam" : "exams"}`;
+  if (delta === 0) {
+    return {
+      label: "Change from previous month",
+      value: "No change",
+      sub: `${last.label} and ${prev.label} both had ${last.exams}`,
+      tone: "ink",
+      sentence: `${last.label} had the same ${last.exams} exams as ${prev.label}.`,
+    };
+  }
+  return {
+    label: "Change from previous month",
+    value: delta > 0 ? `${delta} more` : `${Math.abs(delta)} fewer`,
+    sub: `${last.label} had ${last.exams} · ${prev.label} had ${prev.exams}`,
+    tone: delta > 0 ? "mint" : "rose",
+    sentence: `${last.label} had ${last.exams} exams, ${countLabel} ${delta > 0 ? "more" : "fewer"} than ${prev.label}.`,
+  };
+}
+
 export function examActivityInsight(
   exams: ExamSummaryRow[],
   chartRows: ActivityChartPoint[],
-  growth: string,
 ): { headline: string; body: string } {
   if (!exams.length && !chartRows.length) {
     return {
@@ -230,13 +280,12 @@ export function examActivityInsight(
   const last = chartRows[chartRows.length - 1];
 
   const headline = last
-    ? `${last.exams} exams and ${last.participants.toLocaleString()} sittings in ${last.label}`
+    ? `${last.exams} exams and ${last.participants.toLocaleString()} students sat in ${last.label}`
     : `${exams.length} exams in this view`;
 
   const parts: string[] = [];
-  if (chartRows.length > 1) {
-    parts.push(`Exam volume is ${growth}% versus the start of this series.`);
-  }
+  const change = monthExamChange(chartRows).sentence;
+  if (change) parts.push(change);
   if (sat) {
     parts.push(
       `Across ${sittings.toLocaleString()} sittings, ${passRate}% passed, with ${failed.toLocaleString()} fails and ${absent.toLocaleString()} absences.`,

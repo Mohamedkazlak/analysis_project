@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 px-6 py-6 lg:px-10">
+        <main className="min-w-0 flex-1 px-6 py-6 pb-28 lg:px-10">
           <div className="mb-4 flex items-center gap-2.5 md:hidden">
             <img
               className="h-9 w-auto shrink-0 object-contain"
@@ -196,7 +196,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="mt-6 flex flex-col gap-6">
             {role !== "student" ? <AnalyticsFilters /> : null}
-            <div key={pathname} className="flex flex-col gap-6">
+            <div key={pathname} className="rise-in flex flex-col gap-6">
               {children}
             </div>
           </div>
@@ -218,7 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </main>
       </div>
-      {role !== "student" && <ChatPanel />}
+      <ChatPanel />
     </div>
   );
 }

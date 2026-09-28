@@ -193,6 +193,8 @@ export interface RankedStudent {
   studentId: string;
   name: string;
   course: string;
+  college: string;
+  collegeId: string;
   average: number;
   best: number;
   trend: number;
@@ -200,13 +202,28 @@ export interface RankedStudent {
 }
 
 export interface StudentPerformanceReport {
-  averageByExam: { exam: string; average: number; course: string }[];
+  averageByExam: {
+    exam: string;
+    average: number;
+    course: string;
+    college: string;
+    collegeId: string;
+  }[];
   highest: { name: string; score: number; exam: string };
   lowest: { name: string; score: number; exam: string };
   passFail: { name: string; value: number }[];
   distribution: { bucket: string; students: number }[];
   ranked: RankedStudent[];
-  semesterComparison: { exam: string; current: number; previous: number }[];
+  semesterComparison: {
+    exam: string;
+    course: string;
+    college: string;
+    collegeId: string;
+    current: number | null;
+    previous: number | null;
+  }[];
+  currentTerm: string | null;
+  previousTerm: string | null;
   insight: string;
 }
 

@@ -22,11 +22,7 @@ export function filterByStanding<T extends { passRate: number }>(
 }
 
 export type ComparisonSortKey =
-  | "course"
-  | "enrolled"
-  | "average"
-  | "passRate"
-  | "standing";
+  "course" | "enrolled" | "average" | "passRate" | "standing";
 
 export type ComparisonRow = {
   course: string;
@@ -56,7 +52,10 @@ export function sortComparisonRows<T extends ComparisonRow>(
     const bv = comparisonSortValue(b, key);
     const cmp =
       typeof av === "string" && typeof bv === "string"
-        ? av.localeCompare(bv, undefined, { numeric: true, sensitivity: "base" })
+        ? av.localeCompare(bv, undefined, {
+            numeric: true,
+            sensitivity: "base",
+          })
         : Number(av) - Number(bv);
     return asc ? cmp : -cmp;
   });
@@ -71,21 +70,41 @@ export function toggleComparisonSort(
   return { key: nextKey, asc: nextKey === "course" };
 }
 
-/** Curricula on /courses stay behind college + professor except for professors. */
+/** University senior management sees every curriculum, then narrows with filters.
+ *  A sector dean still picks a college and professor first. College staff need a professor.
+ */
 export function coursesScopeReady(
   role: string,
   filters: Pick<AnalyticsFilters, "collegeId" | "professorId">,
+  scopeLevel?: string | null,
 ): boolean {
   if (role === "professor") return true;
+  if (role === "senior_management" && scopeLevel !== "sector") return true;
   if (role === "program_director" || role === "academic_affairs") {
     return Boolean(filters.professorId);
   }
   return Boolean(filters.collegeId && filters.professorId);
 }
 
+export function coursesCurriculumSubtitle(
+  role: string,
+  filters: Pick<AnalyticsFilters, "sectorId" | "collegeId" | "professorId">,
+  scopeLevel?: string | null,
+): string {
+  if (role === "senior_management" && scopeLevel !== "sector") {
+    const narrowed = Boolean(
+      filters.sectorId || filters.collegeId || filters.professorId,
+    );
+    return narrowed
+      ? "In the selected scope"
+      : "All curriculum in the university";
+  }
+  return "In this college and professor scope";
+}
+
 export function coursesScopeMessage(role: string): string {
   if (role === "program_director" || role === "academic_affairs") {
-    return "Select a professor to view curricula.";
+    return "Select a professor to view curriculum.";
   }
-  return "Select a college and professor to view curricula.";
+  return "Select a college and professor to view curriculum.";
 }

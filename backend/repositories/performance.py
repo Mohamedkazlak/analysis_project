@@ -13,9 +13,59 @@ EMPTY = {
     "distribution": [],
     "ranked": [],
     "semesterComparison": [],
+    "currentTerm": None,
+    "previousTerm": None,
     "insight": "No attempts in this scope yet.",
     "failCount": 0,
 }
+
+
+def build_semester_pass_rates(rows: list[dict]) -> dict:
+    """Pass rate of scored sittings for the latest term and the term before it.
+
+    Each exam belongs to one term, so a point fills `current` or `previous`.
+    """
+    if not rows:
+        return {"semesterComparison": [], "currentTerm": None, "previousTerm": None}
+
+    terms = []
+    seen = set()
+    for row in sorted(rows, key=lambda item: item["start_date"], reverse=True):
+        if row["term_id"] in seen:
+            continue
+        seen.add(row["term_id"])
+        terms.append(row)
+    current = terms[0]
+    previous = terms[1] if len(terms) > 1 else None
+    current_id = current["term_id"]
+    previous_id = previous["term_id"] if previous else None
+
+    points = []
+    ordered = sorted(
+        rows,
+        key=lambda item: (item["start_date"], item["course"] or "", item["exam"] or ""),
+    )
+    for row in ordered:
+        if row["term_id"] not in (current_id, previous_id):
+            continue
+        scored = int(row["scored"] or 0)
+        rate = round1(int(row["passed"] or 0) / scored * 100) if scored else None
+        is_current = row["term_id"] == current_id
+        points.append(
+            {
+                "exam": (row["exam"] or "").strip(),
+                "course": row["course"],
+                "college": row["college"],
+                "collegeId": row["college_id"],
+                "current": rate if is_current else None,
+                "previous": None if is_current else rate,
+            }
+        )
+    return {
+        "semesterComparison": points,
+        "currentTerm": current["term_name"],
+        "previousTerm": previous["term_name"] if previous else None,
+    }
 
 
 async def get_student_performance(
@@ -33,11 +83,13 @@ async def get_student_performance(
             a.exam_id,
             split_part(a.exam_title, '—', 1) AS exam,
             a.course_code AS course,
+            a.program AS college,
+            a.program_id AS college_id,
             MIN(a.scheduled_at) AS scheduled_at,
             AVG(a.score)::float AS average
         FROM v_exam_attempts a
         WHERE {participated}
-        GROUP BY a.exam_id, a.exam_title, a.course_code
+        GROUP BY a.exam_id, a.exam_title, a.course_code, a.program, a.program_id
         ORDER BY MIN(a.scheduled_at)
         """,
         *args,
@@ -46,7 +98,13 @@ async def get_student_performance(
         return EMPTY
 
     average_by_exam = [
-        {"exam": (r["exam"] or "").strip(), "course": r["course"], "average": round1(r["average"])}
+        {
+            "exam": (r["exam"] or "").strip(),
+            "course": r["course"],
+            "college": r["college"],
+            "collegeId": r["college_id"],
+            "average": round1(r["average"]),
+        }
         for r in exam_rows
     ]
 
@@ -97,6 +155,8 @@ async def get_student_performance(
             a.student_id,
             a.student_name AS name,
             (ARRAY_AGG(a.course_code ORDER BY a.scheduled_at DESC))[1] AS course,
+            (ARRAY_AGG(a.program ORDER BY a.scheduled_at DESC))[1] AS college,
+            (ARRAY_AGG(a.program_id ORDER BY a.scheduled_at DESC))[1] AS college_id,
             AVG(a.score)::float AS average,
             MAX(a.score)::float AS best,
             ARRAY_AGG(a.score ORDER BY a.scheduled_at) AS scores
@@ -123,6 +183,8 @@ async def get_student_performance(
                 "studentId": r["student_id"],
                 "name": r["name"],
                 "course": r["course"],
+                "college": r["college"],
+                "collegeId": r["college_id"],
                 "average": average,
                 "best": float(r["best"]),
                 "trend": trend,
@@ -130,16 +192,28 @@ async def get_student_performance(
             }
         )
 
-    by_course_series: dict[str, list] = {}
-    for v in average_by_exam:
-        by_course_series.setdefault(v["course"], []).append(v)
-    semester_comparison = []
-    for course, series in by_course_series.items():
-        for i, v in enumerate(series):
-            previous = series[i - 1]["average"] if i > 0 else v["average"]
-            semester_comparison.append(
-                {"exam": v["exam"], "current": v["average"], "previous": previous}
-            )
+    term_rows = await db.fetch(
+        f"""
+        SELECT
+            t.id AS term_id,
+            t.name AS term_name,
+            t.start_date,
+            split_part(a.exam_title, '—', 1) AS exam,
+            a.course_code AS course,
+            a.program AS college,
+            a.program_id AS college_id,
+            COUNT(*) FILTER (WHERE a.score >= {PASS_MARK}) AS passed,
+            COUNT(*) AS scored
+        FROM v_exam_attempts a
+        JOIN exams x ON x.id = a.exam_id
+        JOIN course_offerings o ON o.id = x.offering_id
+        JOIN terms t ON t.id = o.term_id
+        WHERE {participated}
+        GROUP BY t.id, t.name, t.start_date, a.exam_id, a.exam_title, a.course_code, a.program, a.program_id
+        """,
+        *args,
+    )
+    semester = build_semester_pass_rates([dict(row) for row in term_rows])
 
     return {
         "averageByExam": average_by_exam,
@@ -155,11 +229,16 @@ async def get_student_performance(
         },
         "passFail": [
             {"name": "Passed", "value": int(extrema["passed"] or 0)},
-            {"name": "Failed", "value": int((extrema["total"] or 0) - (extrema["passed"] or 0))},
+            {
+                "name": "Failed",
+                "value": int((extrema["total"] or 0) - (extrema["passed"] or 0)),
+            },
         ],
         "distribution": distribution,
         "ranked": ranked,
-        "semesterComparison": semester_comparison,
+        "semesterComparison": semester["semesterComparison"],
+        "currentTerm": semester["currentTerm"],
+        "previousTerm": semester["previousTerm"],
         "insight": "Scores are tracked across all attempts in this scope.",
         "failCount": fail_count,
     }

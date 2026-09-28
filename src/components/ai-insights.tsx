@@ -348,6 +348,8 @@ export function AiDecisionCard({
     enabled,
     retry: false,
     staleTime: 30_000,
+    refetchInterval: (query) =>
+      query.state.data?.narrationStatus === "pending" ? 4000 : false,
   });
 
   const label = role === "student" ? "Recommendations" : "AI decision";

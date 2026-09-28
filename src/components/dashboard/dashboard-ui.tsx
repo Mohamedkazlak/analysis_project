@@ -262,6 +262,7 @@ export const chartColors = {
   cyan: "#0891b2",
   mint: "#059669",
   amber: "#b45309",
+  yellow: "#eab308",
   rose: "#e11d48",
   grid: "#e9e5f7",
   axis: "#6b6890",

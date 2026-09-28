@@ -1,7 +1,7 @@
 import { AiDecisionSection } from "@/components/ai-insights";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Area,
@@ -44,41 +44,87 @@ function chartHeight(rows: number, rowPx = 44, min = 260) {
   return Math.max(min, rows * rowPx + 48);
 }
 
+function wrapCollegeName(name: string) {
+  const limit = 18;
+  if (name.length <= limit) return [name];
+  const lines: string[] = [];
+  let current = "";
+  for (const word of name.split(" ")) {
+    const next = current ? `${current} ${word}` : word;
+    if (current && next.length > limit) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = next;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+function CollegeNameTick({
+  x = 0,
+  y = 0,
+  payload,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string };
+}) {
+  const lines = wrapCollegeName(String(payload?.value ?? ""));
+  const lineHeight = 12;
+  return (
+    <text x={x} y={y} textAnchor="end" fill={chartColors.axis} fontSize={11}>
+      {lines.map((line, index) => (
+        <tspan
+          key={`${line}-${index}`}
+          x={x}
+          dy={index === 0 ? -((lines.length - 1) * lineHeight) / 2 : lineHeight}
+        >
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+}
+
 function SplitStat({
   title,
-  left,
-  right,
+  parts,
 }: {
   title: string;
-  left: { label: string; value: number; color: string };
-  right: { label: string; value: number; color: string };
+  parts: { label: string; value: number; color: string }[];
 }) {
-  const total = left.value + right.value;
-  const leftPct = total ? (left.value / total) * 100 : 0;
+  const total = parts.reduce((sum, part) => sum + part.value, 0);
   return (
     <div className="glass-panel p-5">
       <div className="text-[11px] font-semibold uppercase tracking-[0.1em] text-ink-soft">
         {title}
       </div>
       <div className="mt-3 flex justify-between gap-3 text-[13px] font-semibold text-ink">
-        <span>
-          {leftPct.toFixed(1)}% {left.label}
-        </span>
-        <span>
-          {(100 - leftPct).toFixed(1)}% {right.label}
-        </span>
+        {parts.map((part) => (
+          <span key={part.label}>
+            {(total ? (part.value / total) * 100 : 0).toFixed(1)}% {part.label}
+          </span>
+        ))}
       </div>
       <div className="mt-2 flex h-3 overflow-hidden rounded-full bg-black/5">
-        <div style={{ width: `${leftPct}%`, background: left.color }} />
-        <div style={{ width: `${100 - leftPct}%`, background: right.color }} />
+        {parts.map((part) => (
+          <div
+            key={part.label}
+            style={{
+              width: `${total ? (part.value / total) * 100 : 0}%`,
+              background: part.color,
+            }}
+          />
+        ))}
       </div>
       <div className="mt-2 flex justify-between gap-3 text-[12px] tabular-nums text-ink-soft">
-        <span>
-          {count(left.value)} {left.label.toLowerCase()}
-        </span>
-        <span>
-          {count(right.value)} {right.label.toLowerCase()}
-        </span>
+        {parts.map((part) => (
+          <span key={part.label}>
+            {count(part.value)} {part.label.toLowerCase()}
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -101,14 +147,14 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
   const byParticipation = [...colleges].sort(
     (a, b) => a.participation - b.participation,
   );
-  const angled = colleges.length > 5;
   const rankH = chartHeight(colleges.length);
   const totals = colleges.reduce(
     (acc, row) => ({
       passed: acc.passed + row.passed,
       failed: acc.failed + row.failed,
       onTime: acc.onTime + row.onTime,
-      notOnTime: acc.notOnTime + row.late + row.absent,
+      late: acc.late + row.late,
+      absent: acc.absent + row.absent,
       attempted: acc.attempted + row.participants,
       noAttempt: acc.noAttempt + row.absent,
     }),
@@ -116,7 +162,8 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
       passed: 0,
       failed: 0,
       onTime: 0,
-      notOnTime: 0,
+      late: 0,
+      absent: 0,
       attempted: 0,
       noAttempt: 0,
     },
@@ -127,103 +174,95 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <SplitStat
           title="Pass / fail"
-          left={{
-            label: "Passed",
-            value: totals.passed,
-            color: chartColors.mint,
-          }}
-          right={{
-            label: "Failed",
-            value: totals.failed,
-            color: chartColors.rose,
-          }}
+          parts={[
+            { label: "Passed", value: totals.passed, color: chartColors.mint },
+            { label: "Failed", value: totals.failed, color: chartColors.rose },
+          ]}
         />
         <SplitStat
           title="Attendance"
-          left={{
-            label: "On time",
-            value: totals.onTime,
-            color: chartColors.iris,
-          }}
-          right={{
-            label: "Late or absent",
-            value: totals.notOnTime,
-            color: chartColors.amber,
-          }}
+          parts={[
+            { label: "On time", value: totals.onTime, color: chartColors.iris },
+            { label: "Late", value: totals.late, color: chartColors.yellow },
+            { label: "Absent", value: totals.absent, color: chartColors.rose },
+          ]}
         />
         <SplitStat
           title="Participation"
-          left={{
-            label: "Attempted",
-            value: totals.attempted,
-            color: chartColors.cyan,
-          }}
-          right={{
-            label: "No attempt",
-            value: totals.noAttempt,
-            color: chartColors.violet,
-          }}
+          parts={[
+            {
+              label: "Attempted",
+              value: totals.attempted,
+              color: chartColors.cyan,
+            },
+            {
+              label: "No attempt",
+              value: totals.noAttempt,
+              color: chartColors.violet,
+            },
+          ]}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel title="Students by college">
           <p className="mb-3 text-[12px] text-ink-soft">
-            Unique students who sat exams. A student is counted once, even when
-            they sat several courses.
+            Each bar is every student who sat. Green passed and red failed.
           </p>
-          <div className="h-80">
+          <div style={{ height: rankH }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={colleges}
-                margin={{
-                  top: 12,
-                  right: 12,
-                  left: 8,
-                  bottom: angled ? 48 : 8,
-                }}
+                data={mix}
+                layout="vertical"
+                margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
               >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                <CartesianGrid stroke={chartColors.grid} horizontal={false} />
                 <XAxis
-                  dataKey="college"
-                  interval={0}
-                  angle={angled ? -25 : 0}
-                  textAnchor={angled ? "end" : "middle"}
+                  type="number"
+                  domain={[0, 100]}
+                  unit="%"
                   tick={{ fontSize: 11, fill: chartColors.axis }}
                   axisLine={false}
                   tickLine={false}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
+                  type="category"
+                  dataKey="college"
+                  width={132}
+                  interval={0}
+                  tick={CollegeNameTick}
                   axisLine={false}
                   tickLine={false}
-                  tickFormatter={(value: number) => count(value)}
                 />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  formatter={(value: number, name: string) => [
-                    count(value),
-                    name,
-                  ]}
+                  formatter={(value: number, name: string, item) => {
+                    const row = item?.payload as CollegeRow | undefined;
+                    const raw = name === "Passed" ? row?.passed : row?.failed;
+                    return [
+                      `${count(raw ?? 0)} students · ${Number(value).toFixed(1)}%`,
+                      name,
+                    ];
+                  }}
                 />
                 <Legend
                   wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
                 />
                 <Bar
                   isAnimationActive={false}
-                  dataKey="passed"
+                  dataKey="passedShare"
                   name="Passed"
                   stackId="sittings"
                   fill={chartColors.mint}
-                  maxBarSize={64}
+                  maxBarSize={28}
                 />
                 <Bar
                   isAnimationActive={false}
-                  dataKey="failed"
+                  dataKey="failedShare"
                   name="Failed"
                   stackId="sittings"
                   fill={chartColors.rose}
-                  maxBarSize={64}
+                  maxBarSize={28}
                   radius={[8, 8, 0, 0]}
                 />
               </BarChart>
@@ -255,8 +294,9 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                 <YAxis
                   type="category"
                   dataKey="college"
-                  width={120}
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
+                  width={132}
+                  interval={0}
+                  tick={CollegeNameTick}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -285,15 +325,15 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                   name="On time"
                   stackId="att"
                   fill={chartColors.iris}
-                  maxBarSize={22}
+                  maxBarSize={28}
                 />
                 <Bar
                   isAnimationActive={false}
                   dataKey="lateShare"
                   name="Late"
                   stackId="att"
-                  fill={chartColors.amber}
-                  maxBarSize={22}
+                  fill={chartColors.yellow}
+                  maxBarSize={28}
                 />
                 <Bar
                   isAnimationActive={false}
@@ -301,7 +341,7 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                   name="Absent"
                   stackId="att"
                   fill={chartColors.rose}
-                  maxBarSize={22}
+                  maxBarSize={28}
                   radius={[0, 8, 8, 0]}
                 />
               </BarChart>
@@ -333,8 +373,9 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                 <YAxis
                   type="category"
                   dataKey="college"
-                  width={120}
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
+                  width={132}
+                  interval={0}
+                  tick={CollegeNameTick}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -353,7 +394,7 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                   dataKey="passRate"
                   name="Pass rate"
                   fill={chartColors.violet}
-                  maxBarSize={22}
+                  maxBarSize={28}
                   radius={[0, 8, 8, 0]}
                 >
                   <LabelList
@@ -391,8 +432,9 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                 <YAxis
                   type="category"
                   dataKey="college"
-                  width={120}
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
+                  width={132}
+                  interval={0}
+                  tick={CollegeNameTick}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -411,7 +453,7 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                   dataKey="participation"
                   name="Participation"
                   fill={chartColors.cyan}
-                  maxBarSize={22}
+                  maxBarSize={28}
                   radius={[0, 8, 8, 0]}
                 >
                   <LabelList
@@ -503,6 +545,8 @@ export function OverviewDashboard({
     queryKey,
     queryFn: () => getManagementOverview(filters),
     enabled,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const [sort, setSort] = useState("passRate");
 
@@ -593,7 +637,7 @@ export function OverviewDashboard({
             <thead className="bg-iris/8">
               <tr>
                 <Th>College</Th>
-                <Th>Curricula</Th>
+                <Th>Curriculum</Th>
                 <Th>Participants</Th>
                 <Th>Pass rate</Th>
               </tr>

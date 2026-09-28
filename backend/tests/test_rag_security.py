@@ -7,6 +7,7 @@ from fastapi import HTTPException
 
 from rag.documents import visible_documents
 from rag.errors import LlmUpstreamError, QueryRejected
+from rag.llm_client import _message_text
 from rag.narrative import apply_llm_narratives
 from rag.permissions import DENIED_TABLES, scope_plan
 from rag.sql_guard import guard_sql
@@ -157,6 +158,29 @@ def test_sector_dean_is_limited_to_that_sector_and_president_is_not():
     assert wide_bind is None
 
 
+def test_a_select_cannot_invent_a_number():
+    with pytest.raises(QueryRejected):
+        guard_sql("SELECT 72 AS pass_rate FROM exams", _president())
+    with pytest.raises(QueryRejected):
+        guard_sql("SELECT 'Computer Science' AS college FROM org_units", _president())
+    sql, _bind = guard_sql(
+        "SELECT ROUND(AVG(score), 1) AS average_score FROM exam_attempts",
+        _president(),
+    )
+    assert "score" in sql.lower()
+
+
+def test_boolean_filters_are_allowed():
+    sql, bind = guard_sql(
+        "SELECT COUNT(*) AS student_count FROM students s "
+        "JOIN org_units o ON s.program_id = o.id "
+        "WHERE o.level = 'program' AND o.name = 'علوم الحاسب'",
+        _president(),
+    )
+    assert "AND" in sql
+    assert bind is None
+
+
 def test_mutating_and_multi_statement_sql_is_rejected():
     attacks = [
         "INSERT INTO students (id) VALUES ('x')",
@@ -205,6 +229,46 @@ def test_documents_are_filtered_before_a_prompt_would_see_them():
     assert "Integrity flags" not in "\n".join(visible_documents(_professor()))
 
 
+def test_who_am_i_uses_the_signed_in_account():
+    async def run():
+        db = AsyncMock()
+
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
+            raise AssertionError("model should not be called")
+
+        with patch("rag.chat_engine.chat_completion", fake_completion):
+            student = await get_chat_answer(_student(), db, "who am I?")
+            arabic = await get_chat_answer(_president(), db, "من أنا")
+        assert student["blocked"] is False
+        assert student["text"] == "You're President, Senior Management."
+        assert arabic["text"] == "You're President, Senior Management."
+        db.fetch.assert_not_called()
+
+    asyncio.run(run())
+
+
+def test_smalltalk_and_unsupported_sql_stay_out_of_the_database():
+    async def run():
+        db = AsyncMock()
+        calls = {"n": 0}
+
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
+            calls["n"] += 1
+            return "SELECT 1 AS unsupported WHERE FALSE"
+
+        with patch("rag.chat_engine.chat_completion", fake_completion):
+            hello = await get_chat_answer(_professor(), db, "Hello!")
+            weather = await get_chat_answer(
+                _president(), db, "What is the weather today?"
+            )
+        assert calls["n"] == 1
+        assert hello["text"].startswith("Hi, I'm a chatbot")
+        assert weather["text"] == hello["text"]
+        db.fetch.assert_not_called()
+
+    asyncio.run(run())
+
+
 def test_student_attack_question_does_not_call_the_model():
     async def run():
         with patch("rag.chat_engine.answer_question", new_callable=AsyncMock) as engine:
@@ -217,11 +281,29 @@ def test_student_attack_question_does_not_call_the_model():
     asyncio.run(run())
 
 
+def test_student_university_headcount_is_refused():
+    async def run():
+        db = AsyncMock()
+        with patch("rag.chat_engine.answer_question", new_callable=AsyncMock) as engine:
+            result = await get_chat_answer(
+                _student(), db, "How many students are in the university?"
+            )
+        engine.assert_not_called()
+        db.fetch.assert_not_called()
+        assert result["blocked"] is True
+        assert result["text"] == (
+            "You are not authorized to ask this question. "
+            "I'm here to help answering questions regarding you"
+        )
+
+    asyncio.run(run())
+
+
 def test_malicious_model_sql_is_not_executed():
     async def run():
         db = AsyncMock()
 
-        async def fake_completion(messages, temperature=0.1):
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
             return "SELECT * FROM students; DROP TABLE students"
 
         with patch("rag.chat_engine.chat_completion", fake_completion):
@@ -242,7 +324,7 @@ def test_student_model_sql_is_executed_only_after_scoping():
         db = AsyncMock()
         db.fetch = AsyncMock(return_value=[])
 
-        async def fake_completion(messages, temperature=0.1):
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
             return "SELECT * FROM students"
 
         with patch("rag.chat_engine.chat_completion", fake_completion):
@@ -258,16 +340,254 @@ def test_student_model_sql_is_executed_only_after_scoping():
     asyncio.run(run())
 
 
+def test_clipped_sql_falls_back_to_the_finished_statement():
+    text = _message_text(
+        {
+            "content": "SELECT COUNT(*) AS",
+            "reasoning_content": (
+                "SELECT COUNT(*) AS student_count FROM students "
+                "WHERE program_id = 'prog-computer-science'"
+            ),
+        },
+        sql=True,
+    )
+    assert "FROM students" in text
+
+
+def test_an_answer_does_not_use_the_reasoning_channel():
+    text = _message_text(
+        {
+            "content": "There are 28 courses in the computer science program.",
+            "reasoning_content": (
+                "The user asks about courses. I have authorized rows. "
+                "I need to list them from the table."
+            ),
+        }
+    )
+    assert text == "There are 28 courses in the computer science program."
+
+
+def test_paraphrases_are_sent_to_the_model_and_answered_from_sql():
+    async def run():
+        db = AsyncMock()
+        db.fetch = AsyncMock(return_value=[{"student_count": 648}])
+        asked: list[str] = []
+        questions = [
+            "How many students are in the university?",
+            "What's our student headcount?",
+            "كم عدد الطلاب المسجلين ببرنامج علوم الحاسب ؟",
+        ]
+
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
+            if "SQL generator" in messages[0]["content"]:
+                asked.append(messages[1]["content"])
+                if "علوم الحاسب" in messages[1]["content"]:
+                    return (
+                        "SELECT COUNT(*) AS student_count FROM students s "
+                        "JOIN org_units o ON s.program_id = o.id "
+                        "WHERE lower(o.name) = 'computer science'"
+                    )
+                return (
+                    "The headcount is:\n\n"
+                    "SELECT COUNT(*) AS student_count FROM students"
+                )
+            return "The university has 999 students."
+
+        with patch("rag.chat_engine.chat_completion", fake_completion):
+            answers = [
+                await get_chat_answer(_president(), db, question)
+                for question in questions
+            ]
+        assert asked == questions
+        assert all(
+            "648" in answer["text"] and "999" not in answer["text"]
+            for answer in answers
+        )
+        university_sql = db.fetch.await_args_list[0].args[0]
+        program_sql = db.fetch.await_args_list[2].args[0]
+        assert "computer science" not in university_sql.lower()
+        assert "computer science" in program_sql.lower()
+
+    asyncio.run(run())
+
+
+def test_what_about_a_program_is_counted_like_how_many():
+    async def run():
+        db = AsyncMock()
+        db.fetch = AsyncMock(return_value=[{"course_count": 12}])
+
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
+            if "SQL generator" not in messages[0]["content"]:
+                drafted = messages[-1]["content"]
+                assert "The user asks" not in drafted
+                return "There are 12 courses in the veterinary program."
+            if any("quantity" in message["content"] for message in messages):
+                return (
+                    "SELECT COUNT(*) AS course_count FROM courses c "
+                    "JOIN org_units o ON c.program_id = o.id "
+                    "WHERE lower(o.name) = 'veterinary'"
+                )
+            return (
+                "SELECT c.code, c.name, c.credits FROM courses c "
+                "JOIN org_units o ON c.program_id = o.id "
+                "WHERE lower(o.name) = 'veterinary'"
+            )
+
+        with patch("rag.chat_engine.chat_completion", fake_completion):
+            result = await get_chat_answer(
+                _president(), db, "what about courses in veterinary program?"
+            )
+        assert result["text"] == "There are 12 courses in the veterinary program."
+        sql = db.fetch.await_args.args[0].lower()
+        assert "count" in sql
+        assert "veterinary" in sql
+
+    asyncio.run(run())
+
+
+def test_reasoning_is_not_shown_as_the_answer():
+    from rag.chat_engine import wording_is_grounded
+
+    leaked = (
+        "The user asks about courses in the veterinary program. "
+        "I have authorized rows. I need to list them. credits=2; year_level=1"
+    )
+    assert (
+        wording_is_grounded(leaked, [{"credits": 2, "year_level": 1}], False) is False
+    )
+
+
+def test_a_rejected_statement_is_rewritten_once():
+    async def run():
+        db = AsyncMock()
+        db.fetch = AsyncMock(return_value=[{"average_score": 64}])
+        attempts = {"n": 0}
+
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
+            if "SQL generator" not in messages[0]["content"]:
+                return "The average score is 64."
+            attempts["n"] += 1
+            if attempts["n"] == 1:
+                return "SELECT 72 AS average_score FROM exam_attempts"
+            assert "rejected" in messages[-1]["content"].lower()
+            return "SELECT AVG(score) AS average_score FROM exam_attempts"
+
+        with patch("rag.chat_engine.chat_completion", fake_completion):
+            result = await get_chat_answer(
+                _president(), db, "what is the mean exam score?"
+            )
+        assert attempts["n"] == 2
+        assert result["text"] == "The average score is 64."
+        assert "72" not in result["text"]
+        assert "avg" in db.fetch.await_args.args[0].lower()
+
+    asyncio.run(run())
+
+
+def test_a_select_from_the_user_is_scoped_without_the_model():
+    async def run():
+        db = AsyncMock()
+        db.fetch = AsyncMock(return_value=[{"student_count": 12}])
+
+        async def invented(messages, temperature=0.1, max_tokens=None, **_extra):
+            assert "SQL generator" not in messages[0]["content"]
+            return "There are 99 students."
+
+        with patch("rag.chat_engine.chat_completion", invented):
+            result = await get_chat_answer(
+                _president(),
+                db,
+                "SELECT COUNT(*) AS student_count FROM students",
+            )
+        assert "12" in result["text"]
+        assert "99" not in result["text"]
+
+        async def should_not_run(messages, temperature=0.1, max_tokens=None, **_extra):
+            raise AssertionError("model should not be called")
+
+        with patch("rag.chat_engine.chat_completion", should_not_run):
+            with pytest.raises(HTTPException) as exc:
+                await get_chat_answer(
+                    _president(),
+                    db,
+                    "SELECT * FROM students; DROP TABLE students",
+                )
+        assert exc.value.status_code == 400
+
+    asyncio.run(run())
+
+
+def test_chat_wording_keeps_only_database_numbers():
+    async def run():
+        db = AsyncMock()
+        db.fetch = AsyncMock(return_value=[{"student_count": 648}])
+
+        async def faithful(messages, temperature=0.1, max_tokens=None, **_extra):
+            if "SQL generator" in messages[0]["content"]:
+                return "SELECT COUNT(*) AS student_count FROM students"
+            assert "648" in messages[1]["content"]
+            return "There are 648 students."
+
+        with patch("rag.chat_engine.chat_completion", faithful):
+            kept = await get_chat_answer(
+                _president(), db, "How many students are in the university?"
+            )
+        assert kept["text"] == "There are 648 students."
+
+        async def vague(messages, temperature=0.1, max_tokens=None, **_extra):
+            if "SQL generator" in messages[0]["content"]:
+                return "SELECT COUNT(*) AS student_count FROM students"
+            return "There are many students."
+
+        with patch("rag.chat_engine.chat_completion", vague):
+            dropped = await get_chat_answer(
+                _president(), db, "How many students are in the university?"
+            )
+        assert dropped["text"] == "Based on the available data, student count is 648."
+
+    asyncio.run(run())
+
+
+def test_chat_never_shows_raw_rows():
+    async def run():
+        db = AsyncMock()
+        db.fetch = AsyncMock(
+            return_value=[
+                {"code": "106VTM", "name": "Physiology", "credits": 2},
+                {"code": "GFN101", "name": "English", "credits": 2},
+            ]
+        )
+
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
+            if "SQL generator" in messages[0]["content"]:
+                return (
+                    "SELECT c.code, c.name, c.credits FROM courses c "
+                    "JOIN org_units o ON c.program_id = o.id "
+                    "WHERE lower(o.name) = 'veterinary'"
+                )
+            return "code=106VTM; name=Physiology; credits=2\ncode=GFN101; name=English; credits=2"
+
+        with patch("rag.chat_engine.chat_completion", fake_completion):
+            result = await get_chat_answer(
+                _president(), db, "list courses in the veterinary program"
+            )
+        assert "code=" not in result["text"]
+        assert "106VTM" not in result["text"]
+        assert result["text"] == "Based on the available data, there are 2 matching records."
+
+    asyncio.run(run())
+
+
 def test_llm_and_database_failures_do_not_leak_sql():
     async def llm_down():
         db = AsyncMock()
 
-        async def fake_completion(messages, temperature=0.1):
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
             raise LlmUpstreamError()
 
         with patch("rag.chat_engine.chat_completion", fake_completion):
             with pytest.raises(HTTPException) as exc:
-                await get_chat_answer(_president(), db, "How many students are active?")
+                await get_chat_answer(_president(), db, "Which college is weakest?")
         assert exc.value.status_code == 502
         assert "SELECT" not in exc.value.detail
 
@@ -275,7 +595,7 @@ def test_llm_and_database_failures_do_not_leak_sql():
         db = AsyncMock()
         db.fetch = AsyncMock(side_effect=asyncpg.PostgresError("secret sql"))
 
-        async def fake_completion(messages, temperature=0.1):
+        async def fake_completion(messages, temperature=0.1, max_tokens=None, **_extra):
             return "SELECT count(*) AS value FROM students"
 
         with patch("rag.chat_engine.chat_completion", fake_completion):
@@ -295,7 +615,7 @@ def test_narrative_cannot_introduce_a_new_number(monkeypatch):
     monkeypatch.setattr(settings, "AI_NARRATIVE_ENABLED", True)
     monkeypatch.setattr(settings, "LLM_API_KEY", "test-key")
 
-    async def fake_completion(messages, temperature=0.1):
+    async def fake_completion(messages, temperature=0.1, **_extra):
         return '{"insight_body": "The pass rate is 99% and everything is fine."}'
 
     async def run():

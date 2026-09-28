@@ -6,6 +6,7 @@ import {
   examsByCollege,
   examScoreRows,
   filterActivityTrend,
+  monthExamChange,
   filterExamSummaries,
 } from "./exam-activity-chart";
 
@@ -143,14 +144,22 @@ describe("exam summaries", () => {
     ]);
   });
 
+  it("compares the latest month with the month before it", () => {
+    expect(
+      monthExamChange(filterActivityTrend(rows, "term-2025-spring", "all")),
+    ).toMatchObject({
+      value: "6 more",
+      sub: "Mar 2026 had 10 · Feb 2026 had 4",
+    });
+  });
+
   it("summarises exam activity for the AI insight card", () => {
     const insight = examActivityInsight(
       filterExamSummaries(exams, "term-2025-spring", "all"),
       filterActivityTrend(rows, "term-2025-spring", "all"),
-      "150.0",
     );
-    expect(insight.headline).toBe("10 exams and 200 sittings in Mar 2026");
-    expect(insight.body).toContain("Exam volume is 150.0%");
+    expect(insight.headline).toBe("10 exams and 200 students sat in Mar 2026");
+    expect(insight.body).toContain("6 exams more than Feb 2026");
     expect(insight.body).toContain("79.5% passed");
     expect(insight.body).toContain(
       "Computer Science administered the most exams",

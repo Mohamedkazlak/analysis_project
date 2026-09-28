@@ -1,13 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  ComposedChart,
   Legend,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -36,6 +34,7 @@ import {
   examsByCollege,
   filterActivityTrend,
   filterExamSummaries,
+  monthExamChange,
 } from "@/components/dashboard/exam-activity-chart";
 
 export const Route = createFileRoute("/$role/exam-activity")({
@@ -75,9 +74,12 @@ function ExamActivity() {
     queryKey,
     queryFn: () => getManagementOverview(filters),
     enabled,
+    staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const [semesterId, setSemesterId] = useState("all");
   const [monthKey, setMonthKey] = useState("all");
+  const [scoreCollege, setScoreCollege] = useState("");
 
   const trend = data?.activityTrend ?? [];
   const examSummaries = data?.examSummaries ?? [];
@@ -108,8 +110,14 @@ function ExamActivity() {
     [examSummaries, semesterId, monthKey],
   );
   const colleges = useMemo(() => examsByCollege(exams), [exams]);
-  const scores = useMemo(() => examScoreRows(exams).slice(0, 16), [exams]);
-  const angled = colleges.length > 5;
+  const selectedCollege = colleges.some((row) => row.college === scoreCollege)
+    ? scoreCollege
+    : (colleges[0]?.college ?? "");
+  const scores = useMemo(
+    () =>
+      examScoreRows(exams.filter((exam) => exam.college === selectedCollege)),
+    [exams, selectedCollege],
+  );
 
   useEffect(() => {
     if (
@@ -129,13 +137,9 @@ function ExamActivity() {
   if (!filtersReady) return <FiltersRequiredNotice />;
   if (isPending || !data) return <ScreenSkeleton cards={3} panels={3} />;
 
-  const first = trend[0];
-  const last = trend[trend.length - 1];
-  const growth =
-    first && last && first.exams
-      ? (((last.exams - first.exams) / first.exams) * 100).toFixed(1)
-      : "0.0";
-  const insight = examActivityInsight(exams, chartRows, growth);
+  const latest = chartRows[chartRows.length - 1];
+  const change = monthExamChange(chartRows);
+  const insight = examActivityInsight(exams, chartRows);
 
   function onSemesterChange(id: string) {
     setSemesterId(id);
@@ -166,21 +170,21 @@ function ExamActivity() {
     <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBlock
-          label="Exams last month"
-          value={(last?.exams ?? 0).toLocaleString()}
-          sub={last ? `${last.month} ${last.year ?? ""}`.trim() : ""}
+          label="Exams in latest month"
+          value={(latest?.exams ?? 0).toLocaleString()}
+          sub={latest?.label ?? "No exams in this view"}
         />
         <StatBlock
-          label="Participants last month"
-          value={(last?.participants ?? 0).toLocaleString()}
-          sub="Unique sittings"
+          label="Students who sat"
+          value={(latest?.participants ?? 0).toLocaleString()}
+          sub={latest ? `Unique students in ${latest.label}` : ""}
           tone="iris"
         />
         <StatBlock
-          label="6-month growth"
-          value={`${growth}%`}
-          sub="Exams administered"
-          tone="mint"
+          label={change.label}
+          value={change.value}
+          sub={change.sub}
+          tone={change.tone}
         />
       </div>
 
@@ -189,67 +193,95 @@ function ExamActivity() {
       </AiInsight>
       <AiDecisionSection />
 
-      <Panel title="Exams & participants" action={periodFilters}>
+      <Panel title="Exams and students each month" action={periodFilters}>
+        <p className="mb-3 text-[12px] text-ink-soft">
+          Exams held, and the number of students who sat at least one. Each
+          chart has its own scale.
+        </p>
         {chartRows.length ? (
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={chartRows}
-                margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  yAxisId="exams"
-                  allowDecimals={false}
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  yAxisId="participants"
-                  orientation="right"
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(value: number) => count(value)}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value: number, name: string) => [
-                    count(value),
-                    name,
-                  ]}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
-                />
-                <Bar
-                  yAxisId="exams"
-                  isAnimationActive={false}
-                  dataKey="exams"
-                  name="Exams"
-                  fill={chartColors.iris}
-                  maxBarSize={48}
-                  radius={[8, 8, 0, 0]}
-                />
-                <Line
-                  yAxisId="participants"
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="participants"
-                  name="Participants"
-                  stroke={chartColors.cyan}
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: chartColors.cyan }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div>
+              <p className="mb-2 text-[12px] font-semibold text-ink">Exams</p>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartRows}
+                    margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
+                  >
+                    <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      interval={0}
+                      tick={{ fontSize: 11, fill: chartColors.axis }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: chartColors.axis }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      formatter={(value: number) => [count(value), "Exams"]}
+                    />
+                    <Bar
+                      isAnimationActive={false}
+                      dataKey="exams"
+                      name="Exams"
+                      fill={chartColors.iris}
+                      maxBarSize={48}
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div>
+              <p className="mb-2 text-[12px] font-semibold text-ink">
+                Students who sat
+              </p>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={chartRows}
+                    margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
+                  >
+                    <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                    <XAxis
+                      dataKey="label"
+                      interval={0}
+                      tick={{ fontSize: 11, fill: chartColors.axis }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tick={{ fontSize: 11, fill: chartColors.axis }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(value: number) => count(value)}
+                    />
+                    <Tooltip
+                      contentStyle={tooltipStyle}
+                      formatter={(value: number) => [
+                        count(value),
+                        "Students who sat",
+                      ]}
+                    />
+                    <Bar
+                      isAnimationActive={false}
+                      dataKey="participants"
+                      name="Students who sat"
+                      fill={chartColors.cyan}
+                      maxBarSize={48}
+                      radius={[8, 8, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
         ) : (
           <p className="py-10 text-center text-[13px] text-ink-soft">
@@ -259,35 +291,32 @@ function ExamActivity() {
       </Panel>
 
       {colleges.length ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4">
           <Panel title="Exams administered by college">
             <p className="mb-3 text-[12px] text-ink-soft">
               Distinct exams in this view. A course with two sittings counts as
               two exams.
             </p>
-            <div className="h-80">
+            <div style={{ height: chartHeight(colleges.length, 36, 280) }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={colleges}
-                  margin={{
-                    top: 12,
-                    right: 12,
-                    left: 8,
-                    bottom: angled ? 48 : 8,
-                  }}
+                  layout="vertical"
+                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
                 >
-                  <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                  <CartesianGrid stroke={chartColors.grid} horizontal={false} />
                   <XAxis
-                    dataKey="college"
-                    interval={0}
-                    angle={angled ? -25 : 0}
-                    textAnchor={angled ? "end" : "middle"}
+                    type="number"
+                    allowDecimals={false}
                     tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    allowDecimals={false}
+                    type="category"
+                    dataKey="college"
+                    width={280}
+                    interval={0}
                     tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
@@ -301,8 +330,8 @@ function ExamActivity() {
                     dataKey="exams"
                     name="Exams"
                     fill={chartColors.iris}
-                    maxBarSize={64}
-                    radius={[8, 8, 0, 0]}
+                    maxBarSize={22}
+                    radius={[0, 8, 8, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -313,32 +342,29 @@ function ExamActivity() {
             <p className="mb-3 text-[12px] text-ink-soft">
               Passed, failed and absent sittings for the exams in this view.
             </p>
-            <div className="h-80">
+            <div style={{ height: chartHeight(colleges.length, 36, 280) }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={colleges}
-                  margin={{
-                    top: 12,
-                    right: 12,
-                    left: 8,
-                    bottom: angled ? 48 : 8,
-                  }}
+                  layout="vertical"
+                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
                 >
-                  <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                  <CartesianGrid stroke={chartColors.grid} horizontal={false} />
                   <XAxis
-                    dataKey="college"
-                    interval={0}
-                    angle={angled ? -25 : 0}
-                    textAnchor={angled ? "end" : "middle"}
-                    tick={{ fontSize: 11, fill: chartColors.axis }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
+                    type="number"
                     tick={{ fontSize: 11, fill: chartColors.axis }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(value: number) => count(value)}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="college"
+                    width={280}
+                    interval={0}
+                    tick={{ fontSize: 11, fill: chartColors.axis }}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <Tooltip
                     contentStyle={tooltipStyle}
@@ -356,7 +382,7 @@ function ExamActivity() {
                     name="Passed"
                     stackId="outcome"
                     fill={chartColors.mint}
-                    maxBarSize={64}
+                    maxBarSize={22}
                   />
                   <Bar
                     isAnimationActive={false}
@@ -364,16 +390,16 @@ function ExamActivity() {
                     name="Failed"
                     stackId="outcome"
                     fill={chartColors.rose}
-                    maxBarSize={64}
+                    maxBarSize={22}
                   />
                   <Bar
                     isAnimationActive={false}
                     dataKey="absent"
                     name="Absent"
                     stackId="outcome"
-                    fill={chartColors.amber}
-                    maxBarSize={64}
-                    radius={[8, 8, 0, 0]}
+                    fill={chartColors.yellow}
+                    maxBarSize={22}
+                    radius={[0, 8, 8, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
@@ -382,15 +408,25 @@ function ExamActivity() {
         </div>
       ) : null}
 
-      {scores.length ? (
-        <Panel title="Exam scores">
+      {selectedCollege ? (
+        <Panel
+          title="Exam scores"
+          action={
+            <Select
+              label="College"
+              value={selectedCollege}
+              options={colleges.map((row) => ({
+                value: row.college,
+                label: row.college,
+              }))}
+              onChange={setScoreCollege}
+            />
+          }
+        >
           <p className="mb-3 text-[12px] text-ink-soft">
-            Mean sitting score, lowest first.
-            {exams.length > scores.length
-              ? ` Showing the ${scores.length} lowest-scoring exams.`
-              : null}
+            Average score for each exam in {selectedCollege}, lowest first.
           </p>
-          <div style={{ height: chartHeight(scores.length, 34, 280) }}>
+          <div style={{ height: chartHeight(scores.length, 34, 240) }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={scores}
@@ -409,8 +445,9 @@ function ExamActivity() {
                 <YAxis
                   type="category"
                   dataKey="label"
-                  width={72}
-                  tick={{ fontSize: 10, fill: chartColors.axis }}
+                  width={148}
+                  interval={0}
+                  tick={{ fontSize: 11, fill: chartColors.axis }}
                   axisLine={false}
                   tickLine={false}
                 />

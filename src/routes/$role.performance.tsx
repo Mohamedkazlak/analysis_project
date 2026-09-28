@@ -2,6 +2,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  collegeOptions,
+  examChartRows,
+  filterByCollege,
+  selectedCollege,
+  semesterCoverage,
+  semesterPassRateNote,
+} from "@/components/dashboard/student-performance";
+import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -78,13 +86,35 @@ function PerformanceReport() {
   const [course, setCourse] = useState("all");
   const [status, setStatus] = useState("all");
   const [query, setQuery] = useState("");
+  const [scoreCollege, setScoreCollege] = useState("");
+  const [passCollege, setPassCollege] = useState("");
+  const [rankedCollege, setRankedCollege] = useState("all");
 
   if (!filtersReady) return <FiltersRequiredNotice />;
   if (isPending || !data) return <ScreenSkeleton cards={4} panels={3} />;
 
+  const scoreColleges = collegeOptions(data.averageByExam);
+  const rankedColleges = collegeOptions(data.ranked);
+  const passColleges = collegeOptions(data.semesterComparison);
+  const activeScoreCollege = selectedCollege(scoreColleges, scoreCollege);
+  const activePassCollege = selectedCollege(passColleges, passCollege);
+  const scoreRows = examChartRows(
+    filterByCollege(data.averageByExam, activeScoreCollege),
+  );
+  const passRows = examChartRows(
+    filterByCollege(data.semesterComparison, activePassCollege),
+  );
+  const passNote = semesterPassRateNote(
+    semesterCoverage(passRows),
+    data.currentTerm,
+    data.previousTerm,
+  );
+
   const courseOptions = [
     { value: "all", label: "All curriculums" },
-    ...Array.from(new Set(data.ranked.map((r) => r.course))).map((c) => ({
+    ...Array.from(
+      new Set(filterByCollege(data.ranked, rankedCollege).map((r) => r.course)),
+    ).map((c) => ({
       value: c,
       label: c,
     })),
@@ -92,6 +122,7 @@ function PerformanceReport() {
 
   const visible = data.ranked.filter(
     (r) =>
+      (rankedCollege === "all" || r.collegeId === rankedCollege) &&
       (course === "all" || r.course === course) &&
       (status === "all" || r.status === status) &&
       r.name.toLowerCase().includes(query.trim().toLowerCase()),
@@ -150,20 +181,36 @@ function PerformanceReport() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Average Score by Test" className="lg:col-span-2">
-          <div className="h-64">
+        <Panel
+          title="Average Score by Test"
+          className="lg:col-span-2"
+          action={
+            scoreColleges.length > 1 ? (
+              <Select
+                label="College"
+                value={activeScoreCollege}
+                options={scoreColleges}
+                onChange={setScoreCollege}
+              />
+            ) : null
+          }
+        >
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                data={data.averageByExam}
-                margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+                data={scoreRows}
+                margin={{ top: 8, right: 8, bottom: 8, left: -18 }}
               >
                 <CartesianGrid stroke={chartColors.grid} vertical={false} />
                 <XAxis
-                  dataKey="exam"
+                  dataKey="label"
                   tick={{ fontSize: 10, fill: chartColors.axis }}
                   axisLine={false}
                   tickLine={false}
                   interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={64}
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: chartColors.axis }}
@@ -171,7 +218,18 @@ function PerformanceReport() {
                   tickLine={false}
                   domain={[0, 100]}
                 />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number, _name, item) => {
+                    const exam = (
+                      item?.payload as { exam?: string } | undefined
+                    )?.exam;
+                    return [
+                      `${Number(value).toFixed(1)}%`,
+                      exam ? `Average · ${exam}` : "Average",
+                    ];
+                  }}
+                />
                 <Bar
                   isAnimationActive={false}
                   dataKey="average"
@@ -246,27 +304,51 @@ function PerformanceReport() {
           </div>
         </Panel>
 
-        <Panel title="Semester over Semester">
-          <div className="h-60">
+        <Panel
+          title="Exam pass rates by semester"
+          action={
+            passColleges.length > 1 ? (
+              <Select
+                label="College"
+                value={activePassCollege}
+                options={passColleges}
+                onChange={setPassCollege}
+              />
+            ) : null
+          }
+        >
+          <p className="mb-3 text-[12px] text-ink-soft">{passNote}</p>
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
-                data={data.semesterComparison}
-                margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+                data={passRows}
+                margin={{ top: 8, right: 8, bottom: 8, left: -18 }}
               >
                 <CartesianGrid stroke={chartColors.grid} vertical={false} />
                 <XAxis
-                  dataKey="exam"
+                  dataKey="label"
                   tick={{ fontSize: 10, fill: chartColors.axis }}
                   axisLine={false}
                   tickLine={false}
+                  interval={0}
+                  angle={-35}
+                  textAnchor="end"
+                  height={64}
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: chartColors.axis }}
                   axisLine={false}
                   tickLine={false}
-                  domain={[40, 100]}
+                  domain={[0, 100]}
+                  unit="%"
                 />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number, name: string) => [
+                    `${Number(value).toFixed(1)}%`,
+                    name,
+                  ]}
+                />
                 <Legend
                   wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
                 />
@@ -274,17 +356,22 @@ function PerformanceReport() {
                   isAnimationActive={false}
                   type="monotone"
                   dataKey="current"
-                  name="This semester"
+                  name={data.currentTerm ?? "This semester"}
                   stroke={chartColors.iris}
                   strokeWidth={2.5}
+                  connectNulls={false}
+                  dot={{ r: 3 }}
                 />
                 <Line
+                  isAnimationActive={false}
                   type="monotone"
                   dataKey="previous"
-                  name="Last semester"
+                  name={data.previousTerm ?? "Last semester"}
                   stroke={chartColors.cyan}
                   strokeWidth={2}
                   strokeDasharray="5 4"
+                  connectNulls={false}
+                  dot={{ r: 3 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -301,9 +388,27 @@ function PerformanceReport() {
               onChange={setQuery}
               placeholder="Find a student…"
             />
+            {rankedColleges.length > 1 ? (
+              <Select
+                label="College"
+                value={rankedCollege}
+                options={[
+                  { value: "all", label: "All colleges" },
+                  ...rankedColleges,
+                ]}
+                onChange={(value) => {
+                  setRankedCollege(value);
+                  setCourse("all");
+                }}
+              />
+            ) : null}
             <Select
               label="Curriculum"
-              value={course}
+              value={
+                courseOptions.some((option) => option.value === course)
+                  ? course
+                  : "all"
+              }
               options={courseOptions}
               onChange={setCourse}
             />

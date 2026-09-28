@@ -150,7 +150,7 @@ function RealTime() {
         title={
           isIntegrity
             ? "Live exams · university-wide"
-            : "Live sittings · my curricula"
+            : "Live sittings · my curriculum"
         }
         action={
           <span className="flex items-center gap-2 text-[11px] font-medium text-ink-soft">

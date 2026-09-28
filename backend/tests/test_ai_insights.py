@@ -19,7 +19,9 @@ def test_cache_keys_isolate_users_and_filters():
     key_b = ai_cache.make_cache_key(b, filters)
     assert key_a != key_b
     other_filters = AnalyticsFilters(sector_id="sec-b", college_id="col-a")
-    assert ai_cache.make_cache_key(a, filters) != ai_cache.make_cache_key(a, other_filters)
+    assert ai_cache.make_cache_key(a, filters) != ai_cache.make_cache_key(
+        a, other_filters
+    )
 
 
 def test_cache_evicts_when_full():
@@ -38,6 +40,7 @@ def test_cache_evicts_when_full():
     finally:
         ai_cache._MAX_ENTRIES = original
         ai_cache.clear()
+
     async def run():
         ctx = make_user(make_scope())
         filters = AnalyticsFilters(sector_id="sec-a", college_id="col-a")

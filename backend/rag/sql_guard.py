@@ -21,6 +21,9 @@ _FORBIDDEN_TEXT = re.compile(
 )
 _ALLOWED_FUNCS = frozenset(
     {
+        # sqlglot reports boolean connectors as functions.
+        "and",
+        "or",
         "count",
         "sum",
         "avg",
@@ -125,7 +128,22 @@ def _parse_select(sql: str) -> exp.Expression:
         name = (func.sql_name() or "").lower()
         if name not in _ALLOWED_FUNCS:
             _reject(400, "The query could not be validated")
+    if _projection_invents_a_value(statement):
+        _reject(400, "The query could not be validated")
     return statement
+
+
+def _projection_invents_a_value(statement: exp.Select) -> bool:
+    """A SELECT value with no column is a number the model typed, not a fact."""
+    for projection in statement.expressions:
+        has_literal = any(projection.find_all(exp.Literal)) or any(
+            projection.find_all(exp.Boolean)
+        )
+        if not has_literal:
+            continue
+        if projection.find(exp.Column) is None and projection.find(exp.Star) is None:
+            return True
+    return False
 
 
 def _table_refs(statement: exp.Expression) -> list[tuple[str, str]]:

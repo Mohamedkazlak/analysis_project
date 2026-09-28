@@ -17,9 +17,9 @@ const headers: Record<Role, string> = {
 
 const openers: Record<Role, string> = {
   student:
-    "Hi Omar — ask me about your scores, topics or how you compare with the anonymized class average.",
+    "Ask me about your scores, topics, or how you compare with the anonymized class average.",
   professor:
-    "Ask me about your assigned curricula — scores, item quality, attendance or participation.",
+    "Ask me about your assigned curriculum — scores, item quality, attendance or participation.",
   it_academic_integrity:
     "Ask me about any live exam at the university, flagged cases, timing anomalies or IP overlap.",
   senior_management:
@@ -51,6 +51,16 @@ const suggestions: Record<Role, string[]> = {
   ],
 };
 
+function openerFor(role: Role, name: string): string {
+  if (role !== "student") return openers[role];
+  const given = name
+    .trim()
+    .split(/\s+/)
+    .find((part) => part && !/^(prof\.?|dr\.?)$/i.test(part));
+  const who = given && !/^u[-_]/i.test(given) ? given : "there";
+  return `Hi ${who} — ${openers.student.charAt(0).toLowerCase()}${openers.student.slice(1)}`;
+}
+
 interface Msg {
   id: number;
   from: "user" | "ai";
@@ -64,12 +74,26 @@ export function ChatPanel() {
   const [input, setInput] = useState("");
   const [context, setContext] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
-  const [messages, setMessages] = useState<Msg[]>([]);
+  const greeting = openerFor(role, user.name);
+  const identity = `${role}:${user.id}`;
+  const identityRef = useRef(identity);
+  const [messages, setMessages] = useState<Msg[]>(() => [
+    { id: 0, from: "ai", text: openerFor(role, user.name) },
+  ]);
   const threadRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMessages([{ id: 0, from: "ai", text: openers[role] }]);
-  }, [role, user.id]);
+    if (identityRef.current !== identity) {
+      identityRef.current = identity;
+      setMessages([{ id: 0, from: "ai", text: greeting }]);
+      return;
+    }
+    setMessages((current) => {
+      if (current.length !== 1 || current[0]?.id !== 0) return current;
+      if (current[0].text === greeting) return current;
+      return [{ id: 0, from: "ai", text: greeting }];
+    });
+  }, [identity, greeting]);
 
   useEffect(
     () =>
@@ -82,7 +106,10 @@ export function ChatPanel() {
   );
 
   useEffect(() => {
-    threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight });
+    threadRef.current?.scrollTo({
+      top: threadRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages, pending, open]);
 
   const send = async (question: string) => {
@@ -108,7 +135,7 @@ export function ChatPanel() {
         {
           id: Date.now() + 1,
           from: "ai",
-          text: "Something went wrong answering that — try again in a moment.",
+          text: "I did not understand the question. Can you repeat it?",
         },
       ]);
     } finally {
@@ -118,16 +145,18 @@ export function ChatPanel() {
 
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-ai px-4 py-3 text-[13px] font-semibold text-white shadow-xl shadow-ai/30"
-      >
-        <MessageCircle className="size-4" />
-        Ask AI
-      </button>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          className="rise-in fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-full bg-ai px-4 py-3 text-[13px] font-semibold text-white shadow-xl shadow-ai/30 transition-transform hover:scale-[1.02]"
+        >
+          <MessageCircle className="size-4" />
+          Ask AI
+        </button>
+      )}
 
       {open && (
-        <div className="fixed bottom-6 right-6 z-50 flex h-[min(560px,80vh)] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white/95 shadow-2xl backdrop-blur-xl">
+        <div className="rise-in fixed bottom-6 right-6 z-50 flex h-[min(560px,80vh)] w-[min(400px,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white/95 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
             <div>
               <div className="text-[13px] font-semibold text-ink">
@@ -147,13 +176,13 @@ export function ChatPanel() {
 
           <div
             ref={threadRef}
-            className="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+            className="flex-1 space-y-3 overflow-y-auto scroll-smooth px-4 py-3"
           >
             {messages.map((m) => (
               <div
                 key={m.id}
                 className={cn(
-                  "max-w-[90%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
+                  "max-w-[90%] break-words rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
                   m.from === "user"
                     ? "ml-auto bg-iris text-white"
                     : m.blocked
@@ -169,12 +198,14 @@ export function ChatPanel() {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-1.5 border-t border-black/5 px-3 py-2">
+          <div className="flex gap-1.5 overflow-x-auto border-t border-black/5 px-3 py-2 [scrollbar-width:none]">
             {suggestions[role].map((s) => (
               <button
                 key={s}
+                type="button"
+                disabled={pending}
                 onClick={() => send(s)}
-                className="rounded-full border border-ai/30 bg-ai/5 px-2.5 py-1 text-[11px] font-medium text-ai"
+                className="shrink-0 rounded-full border border-ai/30 bg-ai/5 px-2.5 py-1 text-[11px] font-medium text-ai disabled:opacity-40"
               >
                 {s}
               </button>

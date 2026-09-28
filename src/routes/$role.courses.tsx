@@ -20,6 +20,7 @@ import { roleGuard } from "@/lib/auth/role-guards";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import { useRole } from "@/components/role-context";
 import {
+  coursesCurriculumSubtitle,
   coursesScopeMessage,
   coursesScopeReady,
   courseStanding,
@@ -56,10 +57,10 @@ export const Route = createFileRoute("/$role/courses")({
 });
 
 function CoursePerformance() {
-  const { role } = useRole();
+  const { role, viewer } = useRole();
   const { filters, filtersReady, queryKey, enabled } =
     useFilteredQuery("course-performance");
-  const scopeReady = coursesScopeReady(role, filters);
+  const scopeReady = coursesScopeReady(role, filters, viewer.level);
   const { data, isPending } = useQuery({
     queryKey,
     queryFn: () => getCoursePerformance(filters),
@@ -114,9 +115,9 @@ function CoursePerformance() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatBlock
-          label="Curricula"
+          label="Curriculum"
           value={courseRows.length.toLocaleString()}
-          sub="In this college and professor scope"
+          sub={coursesCurriculumSubtitle(role, filters, viewer.level)}
         />
         <StatBlock
           label="Average score"

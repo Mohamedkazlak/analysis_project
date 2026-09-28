@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  coursesCurriculumSubtitle,
   coursesScopeMessage,
   coursesScopeReady,
   courseStanding,
@@ -28,9 +29,9 @@ describe("course standing", () => {
       { course: "Calculus", passRate: 61 },
     ];
     expect(filterByStanding(rows, "all")).toHaveLength(2);
-    expect(filterByStanding(rows, "on_track").map((row) => row.course)).toEqual([
-      "Algorithms",
-    ]);
+    expect(filterByStanding(rows, "on_track").map((row) => row.course)).toEqual(
+      ["Algorithms"],
+    );
     expect(
       filterByStanding(rows, "needs_support").map((row) => row.course),
     ).toEqual(["Calculus"]);
@@ -76,27 +77,46 @@ describe("section comparison sort", () => {
 });
 
 describe("courses scope", () => {
-  it("lets professors open their assigned curricula", () => {
+  it("lets professors open their assigned curriculum", () => {
     expect(coursesScopeReady("professor", {})).toBe(true);
   });
 
   it("requires a professor for college-scoped staff", () => {
     expect(coursesScopeReady("program_director", {})).toBe(false);
-    expect(
-      coursesScopeReady("academic_affairs", { professorId: "p-1" }),
-    ).toBe(true);
+    expect(coursesScopeReady("academic_affairs", { professorId: "p-1" })).toBe(
+      true,
+    );
   });
 
-  it("requires college and professor for senior management", () => {
-    expect(coursesScopeReady("senior_management", { collegeId: "col-a" })).toBe(
-      false,
-    );
+  it("shows every curriculum for the university president before filters", () => {
+    expect(coursesScopeReady("senior_management", {}, "university")).toBe(true);
+    expect(coursesScopeReady("senior_management", {})).toBe(true);
     expect(
-      coursesScopeReady("senior_management", {
-        collegeId: "col-a",
-        professorId: "p-1",
-      }),
+      coursesCurriculumSubtitle("senior_management", {}, "university"),
+    ).toBe("All curriculum in the university");
+    expect(
+      coursesCurriculumSubtitle(
+        "senior_management",
+        { sectorId: "sec-a" },
+        "university",
+      ),
+    ).toBe("In the selected scope");
+  });
+
+  it("requires college and professor for a sector dean", () => {
+    expect(
+      coursesScopeReady("senior_management", { collegeId: "col-a" }, "sector"),
+    ).toBe(false);
+    expect(
+      coursesScopeReady(
+        "senior_management",
+        { collegeId: "col-a", professorId: "p-1" },
+        "sector",
+      ),
     ).toBe(true);
     expect(coursesScopeMessage("senior_management")).toContain("college");
+    expect(coursesCurriculumSubtitle("senior_management", {}, "sector")).toBe(
+      "In this college and professor scope",
+    );
   });
 });

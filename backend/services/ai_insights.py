@@ -1,11 +1,24 @@
 """Template AI layer over shared, filter-scoped analytics.
 
-Narratives are generated from repository numbers only. No LLM is called.
+Insights, standings, warnings, and recommendations are all computed from
+repository numbers, deterministically. An LLM is never the source of any of
+those numbers. When configured, an LLM may reword the sentences afterward —
+see the "Narration" note below — but every fact still comes from SQL.
+
+Narration: the configured model is slow (a shared, remote, always-reasoning
+instance), too slow to sit in the request/response path without either
+blocking every card load or silently failing under a tight timeout. So the
+fast, deterministic decision is computed and cached first and returned right
+away, and narration (`rag.narrative`) runs afterward as a background task
+that rewords the cached copy in place once it finishes. The frontend polls
+briefly while `narrationStatus` is `"pending"`.
 """
 
 from __future__ import annotations
 
 import asyncio
+import copy
+import logging
 from typing import Any, Optional
 
 import asyncpg
@@ -16,8 +29,15 @@ from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 from services import ai_cache
 from services.ai_context import load_ai_context
-from rag.narrative import apply_llm_narratives
+from rag.narrative import apply_llm_narratives, has_narratable_text, narration_enabled
 from services.predictions import get_standing_or_forecast
+
+logger = logging.getLogger(__name__)
+
+# Cache keys with a narration task currently running. Guards against
+# scheduling a second background rewrite for the same decision while the
+# first one is still in flight (e.g. two tabs polling the same scope).
+_NARRATION_INFLIGHT: set[str] = set()
 
 
 def _structured_recommendation(
@@ -62,7 +82,7 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         if len(colleges) == 1:
             headline = f"{weakest['college']} pass rate is {weakest['passRate']}%"
             body = (
-                f"{weakest['college']} spans {weakest['courses']} curricula with "
+                f"{weakest['college']} spans {weakest['courses']} curriculum with "
                 f"{weakest['participants']} students who sat exams this term, at a "
                 f"{weakest['passRate']}% student pass rate."
             )
@@ -81,7 +101,7 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         return {
             "headline": headline,
             "body": body,
-            "action": {"label": "Drill into curricula", "to": "/courses"},
+            "action": {"label": "Drill into curriculum", "to": "/courses"},
         }
 
     if role == "academic_affairs":
@@ -147,7 +167,7 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         if not sections:
             return {
                 "headline": "No exam data in this scope yet",
-                "body": "There are no recorded attempts in your assigned curricula yet.",
+                "body": "There are no recorded attempts in your assigned curriculum yet.",
                 "action": None,
             }
         weakest_section = min(sections, key=lambda s: s["average"])
@@ -161,14 +181,14 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
             )
             headline = f"{weakest_section['section']} trails {strongest_section['section']} by {gap} points"
         else:
-            body = f"{weakest_section['section']} averages {weakest_section['average']} across your curricula."
+            body = f"{weakest_section['section']} averages {weakest_section['average']} across your curriculum."
             headline = f"{weakest_section['section']} is your current baseline section"
         needs_review = items.get("needsReview") or []
         if needs_review:
             top = needs_review[0]
             body += (
                 f" {top['exam']} question {top['number']} has a discrimination index of "
-                f"{top['discriminationIndex']}, the weakest in your curricula."
+                f"{top['discriminationIndex']}, the weakest in your curriculum."
             )
         else:
             body += " No graded item-level answers are recorded yet, so item analysis has nothing to flag."
@@ -467,7 +487,7 @@ def _recommendations_from_context(
                         "label": "Compare sections",
                         "to": "/performance",
                         "confirmTitle": "Open the section comparison?",
-                        "confirmBody": "This opens section performance for your curricula. No message is sent to students.",
+                        "confirmBody": "This opens section performance for your curriculum. No message is sent to students.",
                         "confirmLabel": "Open comparison",
                     },
                 )
@@ -555,6 +575,7 @@ def _unavailable(message: str, status: str = "unavailable") -> dict:
         "recommendations": None,
         "status": status,
         "message": message,
+        "narrationStatus": "skipped",
     }
 
 
@@ -568,15 +589,46 @@ async def _compute_decision(
     insight = _insight_from_context(ctx.role, data)
     prediction = await get_standing_or_forecast(ctx, db, filters, data)
     recommendations = _recommendations_from_context(ctx.role, data, insight_id)
-    return await apply_llm_narratives(
-        {
-            "insight": insight,
-            "prediction": prediction,
-            "recommendations": recommendations,
-            "status": "ok",
-            "message": None,
-        }
-    )
+    return {
+        "insight": insight,
+        "prediction": prediction,
+        "recommendations": recommendations,
+        "status": "ok",
+        "message": None,
+        "narrationStatus": "skipped",
+    }
+
+
+async def _narrate_and_recache(key: str, snapshot: dict) -> None:
+    """Reword `snapshot` in place, in the background, then recache it.
+
+    Runs after the deterministic result was already returned to the caller,
+    so it can take as long as `AI_NARRATIVE_BACKGROUND_BUDGET_SECONDS` allows
+    without any card waiting on it. Whatever sentences the model manages to
+    reword before that budget runs out are kept; anything left over simply
+    stays as the original, already-correct SQL sentence — never blank, never
+    wrong, always grounded.
+    """
+    try:
+        await asyncio.wait_for(
+            apply_llm_narratives(snapshot),
+            timeout=settings.AI_NARRATIVE_BACKGROUND_BUDGET_SECONDS,
+        )
+    except Exception:
+        logger.warning("background AI narration did not finish in time", exc_info=True)
+    finally:
+        snapshot["narrationStatus"] = "done"
+        ai_cache.set(key, snapshot)
+        _NARRATION_INFLIGHT.discard(key)
+
+
+def _schedule_narration(key: str, result: dict) -> None:
+    if key in _NARRATION_INFLIGHT:
+        return
+    _NARRATION_INFLIGHT.add(key)
+    # A private, mutated-in-place copy for the background task. `result`
+    # itself is what gets returned to this caller and must stay untouched.
+    asyncio.create_task(_narrate_and_recache(key, copy.deepcopy(result)))
 
 
 async def get_ai_decision(
@@ -621,7 +673,24 @@ async def get_ai_decision(
         )
     except Exception:
         return _unavailable("AI analysis is temporarily unavailable.")
-    ai_cache.set(key, result)
+
+    if narration_enabled() and has_narratable_text(result):
+        result["narrationStatus"] = "pending"
+        # The "pending" placeholder must outlive the narration budget, or a
+        # normal-TTL cache eviction would make a second request in the same
+        # window recompute the decision and schedule a duplicate rewrite.
+        ai_cache.set(
+            key,
+            result,
+            ttl=max(
+                settings.AI_CACHE_TTL_SECONDS,
+                int(settings.AI_NARRATIVE_BACKGROUND_BUDGET_SECONDS) + 5,
+            ),
+        )
+        _schedule_narration(key, result)
+    else:
+        result["narrationStatus"] = "skipped"
+        ai_cache.set(key, result)
     return result
 
 

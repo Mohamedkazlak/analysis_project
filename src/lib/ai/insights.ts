@@ -44,6 +44,8 @@ export interface AiDecision {
   recommendations: RecommendationSet | null;
   status: "ok" | "timeout" | "unavailable";
   message?: string | null;
+  /** "pending" while the LLM is still rewording the SQL sentences above. */
+  narrationStatus?: "pending" | "done" | "skipped";
 }
 
 export const AI_REQUEST_TIMEOUT_MS = 12000;
@@ -73,6 +75,7 @@ export async function getAiDecision(
       message: timedOut
         ? "AI analysis is taking longer than expected."
         : "AI analysis is temporarily unavailable.",
+      narrationStatus: "skipped",
     };
   }
 }

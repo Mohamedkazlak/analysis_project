@@ -7,6 +7,7 @@ role claim, is what the engine and the database use.
 import re
 
 import asyncpg
+from rag.question_sql import static_reply
 from schemas.auth import UserContext
 
 DataDomain = str
@@ -77,6 +78,28 @@ _DEFAULT_DOMAIN: dict[str, DataDomain] = {
     "it_academic_integrity": "integrity_monitoring",
 }
 
+# University headcount is an institution KPI. A scoped COUNT(*) would only
+# count the caller's own row and look like a real university total.
+_STUDENT_HEADCOUNT = re.compile(
+    r"how many students|number of students|كم\s*عدد\s*الطلاب|عدد\s*الطلاب",
+    re.IGNORECASE,
+)
+_UNIVERSITY_SCOPE = re.compile(
+    r"\b(university|institution)\b|الجامع[ةه]", re.IGNORECASE
+)
+
+STUDENT_OUT_OF_SCOPE = (
+    "You are not authorized to ask this question. "
+    "I'm here to help answering questions regarding you"
+)
+
+
+def _university_headcount(question: str) -> bool:
+    return (
+        _STUDENT_HEADCOUNT.search(question) is not None
+        and _UNIVERSITY_SCOPE.search(question) is not None
+    )
+
 
 def classify(question: str, role: str) -> DataDomain:
     q = question.lower()
@@ -86,6 +109,8 @@ def classify(question: str, role: str) -> DataDomain:
         )
     )
     default = _DEFAULT_DOMAIN.get(role, "own_courses")
+    if role == "student" and _university_headcount(q):
+        return "institution_kpis"
     if role == "student" and re.search(
         r"\b(all students|every student|other students|another student|all grades)\b",
         q,
@@ -107,12 +132,14 @@ def classify(question: str, role: str) -> DataDomain:
         return "named_students"
     if re.search(r"\b(class average|cohort|compared to others|peers)\b", q):
         return "anonymized_cohort"
-    if re.search(r"\b(course|section|exam|curriculum|curricula|college|program)\b", q):
+    if re.search(r"\b(course|section|exam|curriculum|college|program)\b", q):
         return default
     return default
 
 
 def refusal_for(role: str, domain: DataDomain) -> str:
+    if role == "student" and domain == "institution_kpis":
+        return STUDENT_OUT_OF_SCOPE
     if role == "student" and domain == "named_students":
         return (
             "I can't share another student's name, score or personal data. I can "
@@ -142,6 +169,10 @@ async def get_chat_answer(
 ) -> dict:
     """Domain gate, then the RAG engine. There is one chat implementation."""
     from rag.chat_engine import answer_question
+
+    reply = static_reply(question, name=ctx.name, display_role=ctx.display_role)
+    if reply is not None:
+        return {"text": reply, "blocked": False}
 
     domain = classify(question, ctx.role)
     allowed = DOMAIN_ALLOW.get(ctx.role, set())
