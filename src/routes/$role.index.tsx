@@ -33,7 +33,10 @@ function RoleHome() {
   }
   if (role === "program_director") {
     return (
-      <OverviewDashboard role="program_director" scopeLabel={affiliation.label} />
+      <OverviewDashboard
+        role="program_director"
+        scopeLabel={affiliation.label}
+      />
     );
   }
   if (role === "academic_affairs") return <AcademicAffairsPage />;
