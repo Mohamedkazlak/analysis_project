@@ -7,6 +7,77 @@ from schemas.filters import AnalyticsFilters
 from services.gpa import standing_from_gpa
 
 
+def select_semester_attempts(attempts: list[dict]) -> list[dict]:
+    """Exams in this student's current semester.
+
+    That semester is the latest term of the current academic year they sat.
+    If they sat nothing in the current year, it is the latest term they did sit.
+    """
+    if not attempts:
+        return []
+    current_year = [row for row in attempts if row.get("is_current")]
+    pool = current_year or list(attempts)
+    chosen = max(pool, key=lambda row: (row["start_date"], row["term_id"]))
+    selected = [row for row in pool if row["term_id"] == chosen["term_id"]]
+    selected.sort(
+        key=lambda row: (
+            row.get("scheduled_at") or row["start_date"],
+            row.get("course_code") or "",
+            row.get("exam_id") or "",
+        )
+    )
+    return selected
+
+
+def course_topic_rows(attempts: list[dict]) -> list[dict]:
+    """One score per course: the mean of this semester's exam scores."""
+    buckets: dict[str, list[float]] = {}
+    names: dict[str, str] = {}
+    for row in attempts:
+        code = (row.get("course_code") or "").strip()
+        name = (row.get("course_name") or "").strip() or code or "Course"
+        key = code or name
+        names[key] = name
+        buckets.setdefault(key, []).append(float(row["score"]))
+    topics = []
+    for key, scores in buckets.items():
+        mean = avg(scores)
+        score = round(mean, 2) if len(scores) == 1 else round1(mean)
+        topics.append({"topic": names[key], "score": score})
+    topics.sort(key=lambda row: (-row["score"], row["topic"]))
+    return topics
+
+
+def resolve_topic_scores(
+    question_topics: list[dict], course_rows: list[dict]
+) -> tuple[str, list[dict]]:
+    """Question topics when they actually differ; otherwise course scores.
+
+    Synthetic questions are often one shared topic, which would make the
+    strongest and weakest topic the same label. Course scores are still
+    SQL facts for this semester.
+    """
+    distinct = {row["topic"] for row in question_topics if row.get("topic")}
+    ranked_questions = sorted(
+        question_topics,
+        key=lambda row: (-float(row["score"]), row["topic"]),
+    )
+    if len(distinct) >= 2:
+        return "questions", ranked_questions
+    courses = course_topic_rows(course_rows)
+    if courses:
+        return "courses", courses
+    return "questions", ranked_questions
+
+
+def _chart_labels(rows: list[dict]) -> None:
+    seen: dict[str, int] = {}
+    for row in rows:
+        base = row["courseCode"] or row["exam"]
+        seen[base] = seen.get(base, 0) + 1
+        row["chartLabel"] = base if seen[base] == 1 else f"{base} · {seen[base]}"
+
+
 async def get_student_dashboard(
     ctx: UserContext,
     db: asyncpg.Connection,
@@ -17,7 +88,7 @@ async def get_student_dashboard(
         student_id = filters.student_id
     student = await db.fetchrow(
         """
-        SELECT id, name
+        SELECT id, name, program, sector
         FROM v_students
         WHERE id = $1
         """,
@@ -26,26 +97,48 @@ async def get_student_dashboard(
     if not student:
         return {
             "studentName": "Unknown",
+            "college": "Unknown",
+            "sector": "",
+            "termName": "",
             "average": 0,
+            "gpa": None,
             "classAverage": 0,
             "bestTopic": "None",
             "weakestTopic": "None",
+            "bestTopicScore": None,
+            "weakestTopicScore": None,
+            "topicsFrom": "questions",
             "scoreTimeline": [],
             "topics": [],
             "insight": "No data found.",
         }
 
-    attempts = await db.fetch(
+    attempt_rows = await db.fetch(
         """
-        SELECT a.exam_id, a.exam_title, a.score, x.scheduled_at
+        SELECT
+            a.exam_id,
+            a.exam_title,
+            a.score,
+            x.scheduled_at,
+            c.name AS course_name,
+            c.code AS course_code,
+            t.id AS term_id,
+            t.name AS term_name,
+            t.start_date,
+            y.is_current
         FROM v_exam_attempts a
         JOIN exams x ON x.id = a.exam_id
-        WHERE a.student_id = $1 AND a.participated
-        ORDER BY x.scheduled_at ASC
+        JOIN course_offerings o ON o.id = x.offering_id
+        JOIN courses c ON c.id = o.course_id
+        JOIN terms t ON t.id = o.term_id
+        JOIN academic_years y ON y.id = t.academic_year_id
+        WHERE a.student_id = $1 AND a.participated AND a.score IS NOT NULL
+        ORDER BY x.scheduled_at ASC, c.code ASC
         """,
         student["id"],
     )
-    exam_ids = [a["exam_id"] for a in attempts]
+    semester = select_semester_attempts([dict(row) for row in attempt_rows])
+    exam_ids = [row["exam_id"] for row in semester]
     class_avgs = {}
     if exam_ids:
         avgs = await db.fetch(
@@ -57,51 +150,94 @@ async def get_student_dashboard(
     timeline = []
     student_scores = []
     class_scores = []
-    for a in attempts:
-        title = (a["exam_title"] or "").split("—")[0].strip()
-        score = float(a["score"])
-        c_avg = round1(class_avgs.get(a["exam_id"], score))
-        student_scores.append(score)
+    for row in semester:
+        title = (row["exam_title"] or "").split("—")[0].strip()
+        score = round(float(row["score"]), 2)
+        c_avg = round1(class_avgs.get(row["exam_id"], score))
+        student_scores.append(float(row["score"]))
         class_scores.append(c_avg)
         timeline.append(
             {
                 "exam": title,
-                "date": a["scheduled_at"].isoformat() if a["scheduled_at"] else "",
+                "course": row["course_name"] or "",
+                "courseCode": row["course_code"] or "",
+                "date": row["scheduled_at"].isoformat() if row["scheduled_at"] else "",
                 "score": score,
                 "classAverage": c_avg,
             }
         )
+    _chart_labels(timeline)
 
     average = round1(avg(student_scores))
     class_average = round1(avg(class_scores))
+    term_name = semester[0]["term_name"] if semester else ""
 
-    topic_rows = await db.fetch(
-        """
-        SELECT q.topic, ROUND(100.0 * AVG(ans.is_correct::int), 1)::float AS score
-        FROM attempt_answers ans
-        JOIN questions q ON q.id = ans.question_id
-        JOIN exam_attempts a ON a.id = ans.attempt_id
-        WHERE a.student_id = $1
-        GROUP BY q.topic
-        ORDER BY 2 DESC
-        """,
-        student["id"],
-    )
-    topics = [{"topic": r["topic"], "score": float(r["score"])} for r in topic_rows]
-    best_topic = topics[0]["topic"] if topics else "None"
-    weakest_topic = topics[-1]["topic"] if topics else "None"
+    question_topics: list[dict] = []
+    if exam_ids:
+        topic_rows = await db.fetch(
+            """
+            SELECT q.topic, ROUND(100.0 * AVG(ans.is_correct::int), 1)::float AS score
+            FROM attempt_answers ans
+            JOIN questions q ON q.id = ans.question_id
+            JOIN exam_attempts a ON a.id = ans.attempt_id
+            WHERE a.student_id = $1 AND a.exam_id = ANY($2::text[])
+            GROUP BY q.topic
+            ORDER BY 2 DESC
+            """,
+            student["id"],
+            exam_ids,
+        )
+        question_topics = [
+            {"topic": r["topic"], "score": float(r["score"])} for r in topic_rows
+        ]
+    topics_from, topics = resolve_topic_scores(question_topics, semester)
+    if topics:
+        best_topic = topics[0]["topic"]
+        weakest_topic = topics[-1]["topic"]
+        best_score = topics[0]["score"]
+        weakest_score = topics[-1]["score"]
+    else:
+        best_topic = "None"
+        weakest_topic = "None"
+        best_score = None
+        weakest_score = None
+
+    transcript = await build_profile_years(db, student["id"])
+    gpa = transcript["gpa"] if transcript["totalCredits"] else None
+    college = student["program"] or "Unknown"
+    compared = "above" if average >= class_average else "below"
+    if semester and gpa is not None:
+        insight = (
+            f"You are in {college}. This semester ({term_name}) your average is "
+            f"{average}, {compared} the class average of {class_average}. "
+            f"Cumulative GPA is {gpa}."
+        )
+    elif semester:
+        insight = (
+            f"You are in {college}. This semester ({term_name}) your average is "
+            f"{average}, {compared} the class average of {class_average}."
+        )
+    else:
+        insight = (
+            f"You are in {college}. No exams are recorded for the current semester."
+        )
 
     return {
         "studentName": student["name"],
+        "college": college,
+        "sector": student["sector"] or "",
+        "termName": term_name,
         "average": average,
+        "gpa": gpa,
         "classAverage": class_average,
         "bestTopic": best_topic,
         "weakestTopic": weakest_topic,
+        "bestTopicScore": best_score,
+        "weakestTopicScore": weakest_score,
+        "topicsFrom": topics_from,
         "scoreTimeline": timeline,
         "topics": topics,
-        "insight": (
-            f"You are tracking {'above' if average >= class_average else 'below'} the class average."
-        ),
+        "insight": insight,
     }
 
 

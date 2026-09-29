@@ -16,6 +16,8 @@ import type { Role } from "@/lib/types";
 import { aiConfig } from "@/lib/ai/config";
 import {
   getAiDecision,
+  type AiWarning,
+  type EvidenceMetric,
   type Insight,
   type Prediction,
   type RiskCase,
@@ -146,8 +148,8 @@ const toneClass = {
   iris: "text-iris",
 };
 
-/** Compact inline standing strip — trend icon plus the current-term rows. */
-function Trajectory({ data }: { data: Prediction }) {
+/** Compact inline standing or forecast strip. Values come from the decision payload. */
+export function AiPrediction({ data }: { data: Prediction }) {
   const Icon = dirIcon[data.direction];
   const heading =
     data.kind === "forecast" ? data.title : data.title || "Current standing";
@@ -301,10 +303,45 @@ export function ConfirmDialog({
  * controls which panels this client renders.
  */
 
-function WarningsStrip({
+export function AiEvidence({ metrics }: { metrics: EvidenceMetric[] }) {
+  const [open, setOpen] = useState(false);
+  if (!metrics.length) return null;
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 text-[11px] font-semibold text-ai"
+      >
+        Based on
+        <ChevronDown
+          className={cn("size-3.5 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1.5">
+          {metrics.slice(0, 6).map((metric) => (
+            <li key={metric.id} className="text-[12px] text-ink-soft">
+              <span className="font-semibold text-ink">
+                {metric.entity || metric.name}
+              </span>
+              {" · "}
+              {metric.name.replace(/_/g, " ")} {metric.value}
+              {metric.unit === "percent" ? "%" : ""}
+              {metric.comparison?.scopeAverage != null
+                ? ` · scope average ${metric.comparison.scopeAverage}`
+                : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function AiWarnings({
   warnings,
 }: {
-  warnings: NonNullable<Insight["warnings"]>;
+  warnings: { id: string; text: string; tone: "amber" | "rose" }[];
 }) {
   return (
     <div className="mt-4 space-y-2">
@@ -325,6 +362,60 @@ function WarningsStrip({
           <span>{w.text}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+export function AiRecommendations({
+  items,
+  onAction,
+}: {
+  items: Recommendation[];
+  onAction: (item: Recommendation) => void;
+}) {
+  return (
+    <div className="mt-5">
+      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-ai">
+        Recommended actions
+      </div>
+      {items.length === 0 ? (
+        <p className="mt-2 text-[13px] text-ink-soft">
+          No actions needed right now — you're on track.
+        </p>
+      ) : (
+        <ul className="mt-3 space-y-2.5">
+          {items.map((item) => {
+            const Icon = item.kind === "action" ? CircleCheck : AlertCircle;
+            return (
+              <li key={item.id} className="rounded-2xl bg-white/60 p-3.5">
+                <div className="flex flex-wrap items-start gap-3">
+                  <Icon
+                    className={cn(
+                      "mt-0.5 size-4 shrink-0",
+                      item.kind === "action" ? "text-ai" : "text-amberink",
+                    )}
+                    strokeWidth={2.2}
+                  />
+                  <div className="min-w-0 flex-1 basis-48">
+                    <p className="text-[13px] font-medium leading-relaxed text-ink">
+                      {item.text}
+                    </p>
+                    <BasedOn item={item} />
+                  </div>
+                  {item.action && (
+                    <button
+                      onClick={() => onAction(item)}
+                      className="mt-0.5 shrink-0 rounded-full bg-ai px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-lg shadow-ai/25 transition-opacity hover:opacity-90"
+                    >
+                      {item.action.label}
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -372,18 +463,23 @@ export function AiDecisionCard({
     ? (data?.prediction ?? null)
     : null;
   const recommendations = data?.recommendations?.items ?? [];
+  const evidence = data?.evidence ?? [];
+  const warnings: AiWarning[] | Insight["warnings"] =
+    data?.warnings ?? insight?.warnings ?? [];
 
   if (!insight && recommendations.length === 0 && !prediction)
     return (
       <AiFrame label={label}>
-        <p className="mt-2 text-[13px] text-ink-soft">{EMPTY_COPY}</p>
+        <p className="mt-2 text-[13px] text-ink-soft">
+          {data?.dataStatus === "insufficient"
+            ? "Not enough recorded data in this scope to produce an insight."
+            : EMPTY_COPY}
+        </p>
       </AiFrame>
     );
 
   const showWarnings =
-    aiConfig.showWarnings[role] &&
-    insight?.warnings &&
-    insight.warnings.length > 0;
+    aiConfig.showWarnings[role] && (warnings?.length ?? 0) > 0;
 
   return (
     <AiFrame label={label}>
@@ -395,12 +491,19 @@ export function AiDecisionCard({
           <p className="mt-1.5 text-[13px] leading-relaxed text-ink">
             {insight.body}
           </p>
+          <AiEvidence metrics={evidence} />
         </>
       )}
 
-      {prediction && <Trajectory data={prediction} />}
+      {data?.narrationStatus === "pending" && (
+        <p className="mt-2 text-[11px] text-ink-soft">
+          Showing verified figures. Wording is still being refined.
+        </p>
+      )}
 
-      {showWarnings && <WarningsStrip warnings={insight!.warnings!} />}
+      {prediction && <AiPrediction data={prediction} />}
+
+      {showWarnings && warnings && <AiWarnings warnings={warnings} />}
 
       {insight?.cases && (
         <div className="mt-4 space-y-2.5">
@@ -410,49 +513,7 @@ export function AiDecisionCard({
         </div>
       )}
 
-      <div className="mt-5">
-        <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-ai">
-          Recommended actions
-        </div>
-        {recommendations.length === 0 ? (
-          <p className="mt-2 text-[13px] text-ink-soft">
-            No actions needed right now — you're on track.
-          </p>
-        ) : (
-          <ul className="mt-3 space-y-2.5">
-            {recommendations.map((item) => {
-              const Icon = item.kind === "action" ? CircleCheck : AlertCircle;
-              return (
-                <li key={item.id} className="rounded-2xl bg-white/60 p-3.5">
-                  <div className="flex flex-wrap items-start gap-3">
-                    <Icon
-                      className={cn(
-                        "mt-0.5 size-4 shrink-0",
-                        item.kind === "action" ? "text-ai" : "text-amberink",
-                      )}
-                      strokeWidth={2.2}
-                    />
-                    <div className="min-w-0 flex-1 basis-48">
-                      <p className="text-[13px] font-medium leading-relaxed text-ink">
-                        {item.text}
-                      </p>
-                      <BasedOn item={item} />
-                    </div>
-                    {item.action && (
-                      <button
-                        onClick={() => setPendingItem(item)}
-                        className="mt-0.5 shrink-0 rounded-full bg-ai px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-lg shadow-ai/25 transition-opacity hover:opacity-90"
-                      >
-                        {item.action.label}
-                      </button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      <AiRecommendations items={recommendations} onAction={setPendingItem} />
 
       {insight?.action && <AiAction {...insight.action} />}
       <p className="mt-3 text-[11px] text-ink-soft">

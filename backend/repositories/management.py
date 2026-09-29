@@ -93,11 +93,21 @@ async def get_management_overview(
         (on_time_students / expected_students * 100) if expected_students else 0
     )
 
+    pass_rate_value = round(pass_rate, 1)
+    attendance_value = round(attendance, 1)
+    totals = {
+        "exams": int(total_exams or 0),
+        "students": students,
+        "passRate": pass_rate_value,
+        "attendance": attendance_value,
+        "colleges": 0,
+    }
+
     kpis = [
-        {"label": "Exams administered", "value": str(total_exams)},
+        {"label": "Exams administered", "value": str(totals["exams"])},
         {"label": "Students", "value": str(students)},
-        {"label": "Student pass rate", "value": f"{pass_rate:.1f}%"},
-        {"label": "Attendance", "value": f"{attendance:.1f}%"},
+        {"label": "Student pass rate", "value": f"{pass_rate_value:.1f}%"},
+        {"label": "Attendance", "value": f"{attendance_value:.1f}%"},
     ]
 
     pass_rate_by_course = [
@@ -262,8 +272,19 @@ async def get_management_overview(
         for r in exam_rows
     ]
 
+    totals["colleges"] = len(pass_rate_by_college)
     if not pass_rate_by_college:
         insight = "No exam attempts in this scope yet."
+    elif (
+        not filters.sector_id
+        and not filters.college_id
+        and len(pass_rate_by_college) > 1
+    ):
+        insight = (
+            f"University student pass rate is {pass_rate_value:.1f}% across "
+            f"{len(pass_rate_by_college)} colleges and {students} students who sat exams. "
+            f"Attendance is {attendance_value:.1f}%."
+        )
     elif len(pass_rate_by_college) == 1:
         only = pass_rate_by_college[0]
         insight = (
@@ -273,8 +294,13 @@ async def get_management_overview(
     else:
         weakest = min(pass_rate_by_college, key=lambda r: r["passRate"])
         strongest = max(pass_rate_by_college, key=lambda r: r["passRate"])
+        place = (
+            "this sector"
+            if filters.sector_id and not filters.college_id
+            else "this view"
+        )
         insight = (
-            f"{weakest['college']} has the lowest student pass rate in this view "
+            f"{weakest['college']} has the lowest student pass rate in {place} "
             f"at {weakest['passRate']}%, while {strongest['college']} leads at "
             f"{strongest['passRate']}%."
         )
@@ -300,5 +326,6 @@ async def get_management_overview(
         "activityTrend": timeline,
         "examSummaries": exam_summaries,
         "insight": insight,
+        "totals": totals,
         "containsSynthetic": contains_synthetic,
     }

@@ -25,6 +25,29 @@ export interface Insight {
   warnings?: { id: string; text: string; tone: "amber" | "rose" }[];
 }
 
+export interface EvidenceMetric {
+  id: string;
+  name: string;
+  entity?: string | null;
+  value: number;
+  unit: string;
+  source: "deterministic_sql";
+  dataset: string;
+  comparison?: { name: string; scopeAverage?: number | null } | null;
+}
+
+export interface AiWarning {
+  id: string;
+  rule: string;
+  severity: "low" | "medium" | "high";
+  tone: "amber" | "rose";
+  metric: string;
+  entity?: string | null;
+  value: number;
+  threshold: number;
+  text: string;
+}
+
 export interface Prediction {
   title: string;
   direction: "rising" | "stable" | "falling";
@@ -36,12 +59,20 @@ export interface Prediction {
   }[];
   action: { label: string; to: string } | null;
   kind?: "current_standing" | "forecast";
+  method?: string | null;
+  observations?: number | null;
+  forecastValue?: number | null;
+  intervalLow?: number | null;
+  intervalHigh?: number | null;
 }
 
 export interface AiDecision {
   insight: Insight | null;
   prediction: Prediction | null;
   recommendations: RecommendationSet | null;
+  warnings?: AiWarning[] | null;
+  evidence?: EvidenceMetric[] | null;
+  dataStatus?: "ready" | "insufficient";
   status: "ok" | "timeout" | "unavailable";
   message?: string | null;
   /** "pending" while the LLM is still rewording the SQL sentences above. */
@@ -75,6 +106,7 @@ export async function getAiDecision(
       message: timedOut
         ? "AI analysis is taking longer than expected."
         : "AI analysis is temporarily unavailable.",
+      dataStatus: "insufficient",
       narrationStatus: "skipped",
     };
   }

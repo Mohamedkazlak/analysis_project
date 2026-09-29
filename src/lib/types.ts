@@ -185,6 +185,13 @@ export interface ManagementOverview {
     avgScore: number;
   }[];
   insight: string;
+  totals?: {
+    exams: number;
+    students: number;
+    passRate: number;
+    attendance: number;
+    colleges: number;
+  };
   containsSynthetic?: boolean;
 }
 
@@ -350,17 +357,27 @@ export interface RealTimeReport {
 
 export interface StudentDashboardReport {
   studentName: string;
+  college: string;
+  sector: string;
+  termName: string;
   scoreTimeline: {
     exam: string;
+    course: string;
+    courseCode: string;
+    chartLabel: string;
     date: string;
     score: number;
     classAverage: number;
   }[];
   topics: { topic: string; score: number }[];
+  topicsFrom: "questions" | "courses";
   average: number;
+  gpa: number | null;
   classAverage: number;
   bestTopic: string;
   weakestTopic: string;
+  bestTopicScore: number | null;
+  weakestTopicScore: number | null;
   insight: string;
 }
 

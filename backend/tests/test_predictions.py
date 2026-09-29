@@ -35,6 +35,56 @@ def test_management_output_is_current_standing_not_a_forecast():
     assert "not a forecast" in result["summary"]
 
 
+def test_university_landing_standing_uses_sql_totals():
+    data = {
+        "filters": AnalyticsFilters(),
+        "overview": {
+            "totals": {
+                "exams": 40,
+                "students": 900,
+                "passRate": 74.2,
+                "attendance": 88.5,
+                "colleges": 9,
+            },
+            "passRateByCollege": [
+                {"college": "Engineering", "passRate": 68.0, "participants": 100},
+                {"college": "Medicine", "passRate": 81.0, "participants": 120},
+            ],
+        },
+    }
+    result = current_standing_from_context("senior_management", data)
+    assert result["title"] == "Current standing · university"
+    assert result["rows"][0] == {
+        "label": "Student pass rate",
+        "value": "74.2%",
+        "tone": "mint",
+    }
+    assert result["rows"][2]["value"] == "900"
+    assert "Engineering" not in result["rows"][0]["label"]
+
+
+def test_sector_selection_keeps_college_standing():
+    data = {
+        "filters": AnalyticsFilters(sector_id="sec-eng"),
+        "overview": {
+            "totals": {
+                "exams": 12,
+                "students": 200,
+                "passRate": 70.0,
+                "attendance": 80.0,
+                "colleges": 2,
+            },
+            "passRateByCollege": [
+                {"college": "Engineering", "passRate": 68.0, "participants": 100},
+                {"college": "Energy Sciences", "passRate": 74.0, "participants": 80},
+            ],
+        },
+    }
+    result = current_standing_from_context("senior_management", data)
+    assert result["title"] == "Current standing · colleges in this sector"
+    assert result["rows"][0]["label"] == "Engineering"
+
+
 def test_empty_scope_returns_nothing_rather_than_inventing_numbers():
     assert current_standing_from_context("senior_management", {"overview": {}}) is None
     assert current_standing_from_context("student", {"dashboard": {}}) is None

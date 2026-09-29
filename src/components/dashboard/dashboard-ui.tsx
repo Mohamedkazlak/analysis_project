@@ -56,11 +56,13 @@ export function StatBlock({
   value,
   sub,
   tone = "ink",
+  valueClassName,
 }: {
   label: string;
   value: string;
   sub?: string;
   tone?: "ink" | "mint" | "rose" | "iris";
+  valueClassName?: string;
 }) {
   const toneClass = {
     ink: "text-ink",
@@ -74,7 +76,11 @@ export function StatBlock({
         {label}
       </div>
       <div
-        className={cn("font-display mt-2 text-3xl font-extrabold", toneClass)}
+        className={cn(
+          "font-display mt-2 font-extrabold break-words",
+          valueClassName ?? "text-3xl",
+          toneClass,
+        )}
       >
         {value}
       </div>

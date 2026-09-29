@@ -31,7 +31,11 @@ import {
   chartColors,
   tooltipStyle,
 } from "@/components/dashboard/dashboard-ui";
-import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
+import {
+  useAnalyticsFilters,
+  useFilteredQuery,
+} from "@/components/dashboard/use-analytics-filters";
+import { useRole } from "@/components/role-context";
 import type { ManagementOverview, Role } from "@/lib/types";
 
 type CollegeRow = ManagementOverview["passRateByCollege"][number];
@@ -538,9 +542,25 @@ export function OverviewDashboard({
   role: Role;
   scopeLabel?: string;
 }) {
+  const { viewer } = useRole();
+  const { options } = useAnalyticsFilters();
   const { filters, filtersReady, queryKey, enabled } = useFilteredQuery(
     "management-overview",
   );
+  const sectorName = options?.sectors.find(
+    (item) => item.id === filters.sectorId,
+  )?.name;
+  const collegeName = options?.colleges.find(
+    (item) => item.id === filters.collegeId,
+  )?.name;
+  const universityWide =
+    role === "senior_management" &&
+    viewer.level !== "sector" &&
+    !filters.sectorId &&
+    !filters.collegeId;
+  const presidentScope = universityWide
+    ? "University-wide"
+    : [sectorName, collegeName].filter(Boolean).join(" · ") || scopeLabel;
   const { data, isPending } = useQuery({
     queryKey,
     queryFn: () => getManagementOverview(filters),
@@ -573,6 +593,11 @@ export function OverviewDashboard({
   if (isPresident) {
     return (
       <>
+        {presidentScope ? (
+          <div className="rounded-2xl border border-iris/20 bg-iris/8 px-4 py-2.5 text-[12px] font-medium text-iris">
+            Scope · {presidentScope}
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-6 lg:grid-cols-4">
           {data.kpis.map((kpi) => (
             <KpiCard key={kpi.label} kpi={kpi} />

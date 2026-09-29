@@ -124,7 +124,7 @@ async def get_course_performance(
 
     weakest = sorted(sections, key=lambda x: x["average"])[0] if sections else None
     insight = (
-        f"{weakest['course']} trails other courses in this scope."
+        f"{weakest['course']} has the lowest average in this scope at {weakest['average']}."
         if weakest
         else "No course rows in this scope yet."
     )

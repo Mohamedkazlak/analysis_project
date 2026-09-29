@@ -19,18 +19,26 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 import asyncpg
 
 from core.config import settings
 from core.utils import PASS_MARK
+from repositories.sql_filters import attempt_where
 from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 from services import ai_cache
 from services.ai_context import load_ai_context
+from services.ai_evidence import build_evidence
+from services.ai_rules import build_warnings
 from rag.narrative import apply_llm_narratives, has_narratable_text, narration_enabled
-from services.predictions import get_standing_or_forecast
+from services.predictions import (
+    comparison_place,
+    get_standing_or_forecast,
+    is_university_landing,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +68,7 @@ def _structured_recommendation(
         "threshold": threshold,
         "basedOn": {"source": source, "evidence": evidence},
         "action": action,
+        "confirmationRequired": action is not None,
     }
 
 
@@ -79,6 +88,31 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
             }
         weakest = min(colleges, key=lambda c: c["passRate"])
         weakest_course = min(courses, key=lambda c: c["passRate"]) if courses else None
+        totals = overview.get("totals") or {}
+        if (
+            is_university_landing(role, data)
+            and totals.get("passRate") is not None
+            and totals.get("students") is not None
+            and totals.get("attendance") is not None
+        ):
+            headline = f"University student pass rate is {totals['passRate']}%"
+            body = f"Across {len(colleges)} colleges, {int(totals['students'])} students sat exams"
+            if totals.get("exams") is not None:
+                body += f" and {int(totals['exams'])} exams were administered"
+            body += (
+                f". The university student pass rate is {totals['passRate']}% "
+                f"and attendance is {totals['attendance']}%."
+            )
+            if len(colleges) > 1:
+                body += (
+                    f" {weakest['college']} is the lowest college at "
+                    f"{weakest['passRate']}%."
+                )
+            return {
+                "headline": headline,
+                "body": body,
+                "action": {"label": "Drill into curriculum", "to": "/courses"},
+            }
         if len(colleges) == 1:
             headline = f"{weakest['college']} pass rate is {weakest['passRate']}%"
             body = (
@@ -87,9 +121,10 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
                 f"{weakest['passRate']}% student pass rate."
             )
         else:
-            headline = f"{weakest['college']} has the lowest pass rate in this view"
+            place = comparison_place(role, data)
+            headline = f"{weakest['college']} has the lowest pass rate in {place}"
             body = (
-                f"Across the {len(colleges)} colleges in this view, {weakest['college']} sits at "
+                f"Across the {len(colleges)} colleges in {place}, {weakest['college']} sits at "
                 f"{weakest['passRate']}% student pass — the lowest here, from "
                 f"{weakest['participants']} students."
             )
@@ -136,33 +171,14 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
             if below_pass
             else f"{weakest_att['course']} attendance needs attention"
         )
-        warnings = []
-        if below_pass:
-            warnings.append(
-                {
-                    "id": "w1",
-                    "text": f"{len(below_pass)} students below pass mark — follow up this week",
-                    "tone": "rose",
-                }
-            )
-        if weakest_att:
-            warnings.append(
-                {
-                    "id": "w2",
-                    "text": f"{weakest_att['course']} attendance {weakest_att['attendance']}%",
-                    "tone": "amber",
-                }
-            )
         return {
             "headline": headline,
             "body": body,
             "action": {"label": "Open student performance", "to": "/performance"},
-            "warnings": warnings or None,
         }
 
     if role == "professor":
         sections = (data.get("courses") or {}).get("sections") or []
-        participation = data.get("participation") or {}
         items = data.get("items") or {}
         if not sections:
             return {
@@ -192,24 +208,10 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
             )
         else:
             body += " No graded item-level answers are recorded yet, so item analysis has nothing to flag."
-        warnings = []
-        curricula = participation.get("attendanceByCurriculum") or []
-        weakest_att = (
-            min(curricula, key=lambda c: c["attendance"]) if curricula else None
-        )
-        if weakest_att and weakest_att["attendance"] < 90:
-            warnings.append(
-                {
-                    "id": "w1",
-                    "text": f"{weakest_att['course']} attendance is {weakest_att['attendance']}%",
-                    "tone": "amber",
-                }
-            )
         return {
             "headline": headline,
             "body": body,
             "action": {"label": "Compare sections", "to": "/performance"},
-            "warnings": warnings or None,
         }
 
     if role == "it_academic_integrity":
@@ -573,10 +575,42 @@ def _unavailable(message: str, status: str = "unavailable") -> dict:
         "insight": None,
         "prediction": None,
         "recommendations": None,
+        "warnings": None,
+        "evidence": None,
+        "metadata": None,
+        "validation": {"status": "not_run", "failures": 0},
+        "dataStatus": "insufficient",
         "status": status,
         "message": message,
         "narrationStatus": "skipped",
     }
+
+
+async def _data_version(db: asyncpg.Connection, filters: AnalyticsFilters) -> str:
+    """Changes when attempts in this authorized scope change."""
+    try:
+        where_sql, args, _ = attempt_where(filters)
+        value = await db.fetchval(
+            f"""
+            SELECT COALESCE(MAX(a.ended_at)::text, 'none') || ':' || COUNT(*)::text
+            FROM v_exam_attempts a
+            WHERE {where_sql}
+            """,
+            *args,
+        )
+        return str(value or "none")
+    except Exception:
+        logger.warning("AI data version lookup failed", exc_info=True)
+        return "unknown"
+
+
+def _attach_warnings(insight: Optional[dict], warnings: list[dict]) -> Optional[dict]:
+    if insight is None:
+        return None
+    insight["warnings"] = [
+        {"id": row["id"], "text": row["text"], "tone": row["tone"]} for row in warnings
+    ] or None
+    return insight
 
 
 async def _compute_decision(
@@ -584,15 +618,29 @@ async def _compute_decision(
     db: asyncpg.Connection,
     filters: AnalyticsFilters,
     insight_id: str,
+    data_version: str,
 ) -> dict:
     data = await load_ai_context(ctx, db, filters)
-    insight = _insight_from_context(ctx.role, data)
+    evidence = build_evidence(ctx.role, data)
+    warnings = build_warnings(ctx.role, evidence, data)
+    insight = _attach_warnings(_insight_from_context(ctx.role, data), warnings)
     prediction = await get_standing_or_forecast(ctx, db, filters, data)
     recommendations = _recommendations_from_context(ctx.role, data, insight_id)
     return {
         "insight": insight,
         "prediction": prediction,
         "recommendations": recommendations,
+        "warnings": warnings or None,
+        "evidence": evidence or None,
+        "metadata": {
+            "role": ctx.role,
+            "scopeId": ctx.scope_id,
+            "generatedAt": datetime.now(timezone.utc).isoformat(),
+            "dataVersion": data_version,
+            "filters": filters.model_dump(),
+        },
+        "validation": {"status": "not_run", "failures": 0},
+        "dataStatus": "ready" if evidence else "insufficient",
         "status": "ok",
         "message": None,
         "narrationStatus": "skipped",
@@ -655,15 +703,20 @@ async def get_ai_decision(
             )
             or ""
         )
+    data_version = await _data_version(db, filters)
     key = ai_cache.make_cache_key(
-        ctx, filters, academic_year_id=year_id, term_id=term_id
+        ctx,
+        filters,
+        academic_year_id=year_id,
+        term_id=term_id,
+        data_version=data_version,
     )
     cached = ai_cache.get(key)
     if cached is not None:
         return cached
     try:
         result = await asyncio.wait_for(
-            _compute_decision(ctx, db, filters, insight_id),
+            _compute_decision(ctx, db, filters, insight_id, data_version),
             timeout=settings.AI_BUDGET_SECONDS,
         )
     except asyncio.TimeoutError:

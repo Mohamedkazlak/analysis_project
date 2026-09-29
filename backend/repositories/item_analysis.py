@@ -84,8 +84,7 @@ async def get_item_analysis(
     insight = (
         (
             f"Question {needs_review[0]['number']} on {needs_review[0]['exam']} has a discrimination index of "
-            f"{needs_review[0]['discriminationIndex']} — strong and weak students answer it almost identically, "
-            "which usually points to ambiguous wording rather than difficulty."
+            f"{needs_review[0]['discriminationIndex']}."
         )
         if needs_review
         else "No items in this scope yet."

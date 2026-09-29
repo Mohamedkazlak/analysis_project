@@ -21,6 +21,7 @@ __pycache__/
 
 # Environment
 .env
+.env.example
 .env.local
 .env.*.local
 *.local
@@ -28,6 +29,8 @@ backend/.api-keys.local
 
 # Local docs (not published)
 API_AND_ROUTES.md
+docs/
+users.txt
 
 # OS / editor
 .DS_Store

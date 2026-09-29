@@ -58,16 +58,16 @@ Do not “fix” remaining slowness by raising those timeouts.
 
 ## Current standing vs prediction
 
-Exam offerings in this database are current-term. Until a forecasting model
-is wired, the UI label is **Current standing**, `kind` is
-`current_standing`, and the copy states that the numbers are not a forecast.
-Year counts used in that copy come from the selected analytics scope (filters
-and RLS), not from global `course_offerings` history.
+When fewer than three yearly transcript averages exist in the authorized
+scope, the UI label is **Current standing**, `kind` is `current_standing`,
+and the copy states that the numbers are not a forecast.
 
-`backend/services/predictions.py` is the extension point for a later
-model that would use multi-term scores, attendance and course history. No LLM
-is used for numerical prediction. The JSON field remains named `prediction`
-for compatibility; it is current standing.
+When three or more yearly averages exist in that same scope, `kind` is
+`forecast`. The value comes from ordinary least squares on those averages
+(`ols_linear_v1` in `backend/services/predictions.py`): next-period estimate,
+observation count, and a residual interval. The model only narrates that
+result. Yearly averages are filtered with the same scope as the rest of
+analytics, not from a global history query.
 
 ## Filters
 
@@ -75,12 +75,18 @@ AI uses the same `AnalyticsFilters` as the dashboard. Cache keys include the
 authenticated user, role, scope, filters, academic year, term and data
 version. The cache is not a security boundary.
 
+The university president landing view, with no sector and no college selected,
+describes the whole university from the SQL totals (student pass rate,
+attendance, students who sat, exams). Choosing a sector or a college narrows
+those sentences to that scope. Sector deans stay inside their sector.
+
 ## Limitations
 
 - Dashboard KPIs and warning rules are deterministic. The model does not
   create them.
-- Optional narrative rephrasing (`AI_NARRATIVE_ENABLED`) is discarded when it
-  introduces a number that was not in the metrics.
+- Optional narrative rephrasing (`AI_NARRATIVE_ENABLED`) sends the SQL
+  sentences to the model in one call. A sentence is discarded when it
+  introduces a number that was not in the metrics, and the SQL wording stays.
 - Chat (`POST /api/chat`) can call an OpenAI-compatible model. SQL is
   validated and scoped before execution. Empty results are reported as empty.
 - In-process cache only (single instance, bounded eviction).
