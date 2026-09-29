@@ -214,15 +214,16 @@ PER_ROW_AUTH_MARKERS = (
 )
 
 
-def _legacy_schema_sql(tmp: Path) -> Path:
-    legacy = tmp / "legacy_schema.sql"
-    shown = None
-    for ref in (
-        "origin/production-hardening:db/schema.sql",
-        "production-hardening:db/schema.sql",
-        "main:db/schema.sql",
-        "origin/main:db/schema.sql",
-    ):
+# Pre-011 schema: boolean RLS helpers, no InitPlan visibility sets / later policies.
+# Never fall back to main — main already includes 013+ and breaks equivalence tests.
+_LEGACY_SCHEMA_REFS = (
+    "origin/production-hardening:db/schema.sql",
+    "production-hardening:db/schema.sql",
+)
+
+
+def _git_show_text(*refs: str) -> str | None:
+    for ref in refs:
         candidate = subprocess.run(
             ["git", "show", ref],
             cwd=ROOT,
@@ -231,11 +232,19 @@ def _legacy_schema_sql(tmp: Path) -> Path:
             check=False,
         )
         if candidate.returncode == 0 and candidate.stdout.strip():
-            shown = candidate
-            break
+            return candidate.stdout
+    return None
+
+
+def _legacy_schema_sql(tmp: Path) -> Path:
+    shown = _git_show_text(*_LEGACY_SCHEMA_REFS)
     if shown is None:
-        pytest.skip("a pre-optimization schema.sql is not available")
-    legacy.write_text(shown.stdout)
+        pytest.skip(
+            "production-hardening:db/schema.sql is required as the pre-optimization "
+            "baseline (do not use main — it already includes InitPlan RLS)."
+        )
+    legacy = tmp / "legacy_schema.sql"
+    legacy.write_text(shown)
     return legacy
 
 
@@ -332,22 +341,7 @@ def migrated_db(tmp_path_factory):
     _recreate(MIGRATED_DB)
     url = _db_url(MIGRATED_DB)
     tmp = tmp_path_factory.mktemp("legacy")
-    legacy = tmp / "legacy_schema.sql"
-    shown = None
-    for ref in ("main:db/schema.sql", "origin/main:db/schema.sql"):
-        candidate = subprocess.run(
-            ["git", "show", ref],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if candidate.returncode == 0 and candidate.stdout.strip():
-            shown = candidate
-            break
-    if shown is None:
-        pytest.skip("main:db/schema.sql is not available for migration comparison")
-    legacy.write_text(shown.stdout)
+    legacy = _legacy_schema_sql(tmp)
     _apply_file(url, legacy)
     env = os.environ.copy()
     env["DATABASE_ADMIN_URL"] = url

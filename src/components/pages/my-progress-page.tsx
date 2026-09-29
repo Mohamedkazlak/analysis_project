@@ -46,7 +46,7 @@ export function MyProgressPage() {
         <StatBlock
           label="College"
           value={data.college}
-          sub={data.sector || undefined}
+          {...(data.sector ? { sub: data.sector } : {})}
           tone="iris"
           valueClassName="text-2xl leading-snug"
         />
@@ -73,9 +73,9 @@ export function MyProgressPage() {
         <StatBlock
           label="Strongest topic"
           value={data.bestTopic}
-          sub={
-            data.bestTopicScore == null ? undefined : `${data.bestTopicScore}`
-          }
+          {...(data.bestTopicScore == null
+            ? {}
+            : { sub: `${data.bestTopicScore}` })}
           tone={
             data.bestTopicScore != null && data.bestTopicScore >= 75
               ? "mint"
@@ -86,11 +86,9 @@ export function MyProgressPage() {
         <StatBlock
           label="Weakest topic"
           value={data.weakestTopic}
-          sub={
-            data.weakestTopicScore == null
-              ? undefined
-              : `${data.weakestTopicScore}`
-          }
+          {...(data.weakestTopicScore == null
+            ? {}
+            : { sub: `${data.weakestTopicScore}` })}
           tone={
             data.weakestTopicScore != null && data.weakestTopicScore < 60
               ? "rose"
@@ -203,13 +201,15 @@ export function MyProgressPage() {
 
       <Panel
         title="Strengths & Weaknesses by Topic"
-        action={
-          data.topics.length ? (
-            <span className="text-[11px] font-medium text-ink-soft">
-              {topicNote}
-            </span>
-          ) : undefined
-        }
+        {...(data.topics.length
+          ? {
+              action: (
+                <span className="text-[11px] font-medium text-ink-soft">
+                  {topicNote}
+                </span>
+              ),
+            }
+          : {})}
       >
         {data.topics.length ? (
           <div style={{ height: Math.max(280, data.topics.length * 40) }}>

@@ -235,6 +235,15 @@ export function monthExamChange(rows: ActivityChartPoint[]): {
     };
   }
   const prev = rows[rows.length - 2];
+  if (!prev) {
+    return {
+      label: "Exams this month",
+      value: last.exams.toLocaleString(),
+      sub: last.label,
+      tone: "ink",
+      sentence: null,
+    };
+  }
   const delta = last.exams - prev.exams;
   const countLabel = `${Math.abs(delta)} ${Math.abs(delta) === 1 ? "exam" : "exams"}`;
   if (delta === 0) {
