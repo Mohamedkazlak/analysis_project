@@ -67,8 +67,8 @@ function CoursePerformance() {
     enabled: enabled && scopeReady,
   });
   const [standing, setStanding] = useState<StandingFilter>("all");
-  const [sortKey, setSortKey] = useState<ComparisonSortKey>("average");
-  const [asc, setAsc] = useState(false);
+  const [sortKey, setSortKey] = useState<ComparisonSortKey>("college");
+  const [asc, setAsc] = useState(true);
 
   if (!filtersReady || !scopeReady) {
     return <FiltersRequiredNotice message={coursesScopeMessage(role)} />;
@@ -164,6 +164,9 @@ function CoursePerformance() {
         <TableShell>
           <thead className="bg-iris/8">
             <tr>
+              <Th onClick={() => toggleSort("college")}>
+                {header("college", "College")}
+              </Th>
               <Th onClick={() => toggleSort("course")}>
                 {header("course", "Course")}
               </Th>
@@ -190,6 +193,9 @@ function CoursePerformance() {
                     key={row.courseCode || row.course}
                     className="bg-white/40"
                   >
+                    <td className="px-4 py-3 text-ink-soft">
+                      {row.college || "—"}
+                    </td>
                     <td className="px-4 py-3 font-semibold text-ink">
                       {row.course}
                     </td>
@@ -218,7 +224,7 @@ function CoursePerformance() {
             ) : (
               <tr className="bg-white/40">
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-6 text-center text-[13px] text-ink-soft"
                 >
                   No courses match this standing filter.

@@ -23,16 +23,8 @@ export function ScopeBanner() {
     curriculum ? `${curriculum.code}` : null,
   ].filter(Boolean);
   return (
-    <div className="space-y-2">
-      <div className="rounded-2xl border border-iris/20 bg-iris/8 px-4 py-2.5 text-[12px] font-medium text-iris">
-        Viewing · {parts.join(" · ")}
-      </div>
-      {options?.containsSynthetic ? (
-        <div className="rounded-2xl border border-amber/30 bg-amber/10 px-4 py-2.5 text-[12px] font-medium text-amberink">
-          This scope includes synthetic demonstration assessment records. Do not
-          treat these figures as official university statistics.
-        </div>
-      ) : null}
+    <div className="rounded-2xl border border-iris/20 bg-iris/8 px-4 py-2.5 text-[12px] font-medium text-iris">
+      Viewing · {parts.join(" · ")}
     </div>
   );
 }

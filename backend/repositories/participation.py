@@ -1,9 +1,20 @@
+from typing import Literal
+
 import asyncpg
 
 from core.utils import avg, round1
 from repositories.sql_filters import attempt_where
 from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
+
+
+def chart_grain(filters: AnalyticsFilters) -> Literal["college", "curriculum", "exam"]:
+    """Widen chart categories so university/college views stay readable."""
+    if filters.curriculum_id:
+        return "exam"
+    if filters.college_id:
+        return "curriculum"
+    return "college"
 
 
 async def get_participation_report(
@@ -13,22 +24,69 @@ async def get_participation_report(
 ):
     filters = filters or AnalyticsFilters()
     where_sql, args, _ = attempt_where(filters)
+    grain = chart_grain(filters)
 
-    exam_rows = await db.fetch(
-        f"""
-        SELECT
-            split_part(a.exam_title, '—', 1) AS exam,
-            COUNT(*) FILTER (WHERE a.participated) AS attempts,
-            COUNT(*) AS expected,
-            COALESCE(AVG(a.time_taken_min) FILTER (WHERE a.participated AND a.time_taken_min IS NOT NULL), 0) AS minutes
-        FROM v_exam_attempts a
-        WHERE {where_sql}
-        GROUP BY a.exam_id, a.exam_title
-        """,
-        *args,
-    )
+    if grain == "college":
+        exam_rows = await db.fetch(
+            f"""
+            SELECT
+                a.program AS exam,
+                COUNT(*) FILTER (WHERE a.participated) AS attempts,
+                COUNT(*) AS expected,
+                COALESCE(
+                    AVG(a.time_taken_min)
+                      FILTER (WHERE a.participated AND a.time_taken_min IS NOT NULL),
+                    0
+                ) AS minutes
+            FROM v_exam_attempts a
+            WHERE {where_sql}
+            GROUP BY a.program
+            ORDER BY a.program
+            """,
+            *args,
+        )
+    elif grain == "curriculum":
+        exam_rows = await db.fetch(
+            f"""
+            SELECT
+                a.course_code AS exam,
+                COUNT(*) FILTER (WHERE a.participated) AS attempts,
+                COUNT(*) AS expected,
+                COALESCE(
+                    AVG(a.time_taken_min)
+                      FILTER (WHERE a.participated AND a.time_taken_min IS NOT NULL),
+                    0
+                ) AS minutes
+            FROM v_exam_attempts a
+            WHERE {where_sql}
+            GROUP BY a.course_code
+            ORDER BY a.course_code
+            """,
+            *args,
+        )
+    else:
+        exam_rows = await db.fetch(
+            f"""
+            SELECT
+                a.course_code || ' · ' || trim(split_part(a.exam_title, '—', 1)) AS exam,
+                COUNT(*) FILTER (WHERE a.participated) AS attempts,
+                COUNT(*) AS expected,
+                COALESCE(
+                    AVG(a.time_taken_min)
+                      FILTER (WHERE a.participated AND a.time_taken_min IS NOT NULL),
+                    0
+                ) AS minutes
+            FROM v_exam_attempts a
+            WHERE {where_sql}
+            GROUP BY a.exam_id, a.course_code, a.exam_title
+            ORDER BY a.course_code, a.exam_title
+            """,
+            *args,
+        )
+
     if not exam_rows:
         return {
+            "grain": grain,
             "attemptsPerExam": [],
             "completionRate": 0,
             "attendanceRate": 0,
@@ -39,7 +97,11 @@ async def get_participation_report(
         }
 
     attempts_per_exam = [
-        {"exam": (r["exam"] or "").strip(), "attempts": int(r["attempts"]), "expected": int(r["expected"])}
+        {
+            "exam": (r["exam"] or "").strip(),
+            "attempts": int(r["attempts"]),
+            "expected": int(r["expected"]),
+        }
         for r in exam_rows
     ]
     avg_time_per_exam = [
@@ -57,26 +119,58 @@ async def get_participation_report(
         """,
         *args,
     )
-    completion_rate = round1((totals["taken"] / totals["total"] * 100) if totals["total"] else 0)
-
-    course_rows = await db.fetch(
-        f"""
-        SELECT
-            a.course_code AS course,
-            COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE a.participated AND NOT a.late_start) AS present,
-            COUNT(*) FILTER (WHERE NOT a.participated) AS absentees
-        FROM v_exam_attempts a
-        WHERE {where_sql}
-        GROUP BY a.course_code
-        """,
-        *args,
+    completion_rate = round1(
+        (totals["taken"] / totals["total"] * 100) if totals["total"] else 0
     )
+
+    if grain == "college":
+        course_rows = await db.fetch(
+            f"""
+            SELECT
+                a.program AS course,
+                COUNT(DISTINCT a.student_id)::int AS students,
+                COUNT(DISTINCT a.student_id)
+                  FILTER (WHERE a.participated)::int AS participated,
+                COUNT(DISTINCT a.student_id)
+                  FILTER (WHERE NOT a.participated)::int AS absentees,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE a.participated AND NOT a.late_start) AS present
+            FROM v_exam_attempts a
+            WHERE {where_sql}
+            GROUP BY a.program
+            ORDER BY a.program
+            """,
+            *args,
+        )
+    else:
+        course_rows = await db.fetch(
+            f"""
+            SELECT
+                a.course_code AS course,
+                COUNT(DISTINCT a.student_id)::int AS students,
+                COUNT(DISTINCT a.student_id)
+                  FILTER (WHERE a.participated)::int AS participated,
+                COUNT(DISTINCT a.student_id)
+                  FILTER (WHERE NOT a.participated)::int AS absentees,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE a.participated AND NOT a.late_start) AS present
+            FROM v_exam_attempts a
+            WHERE {where_sql}
+            GROUP BY a.course_code
+            ORDER BY a.course_code
+            """,
+            *args,
+        )
+
     attendance_by_curriculum = [
         {
             "course": r["course"],
-            "attendance": round1((r["present"] / r["total"] * 100) if r["total"] else 0),
+            "students": int(r["students"]),
+            "participated": int(r["participated"]),
             "absentees": int(r["absentees"]),
+            "attendance": round1(
+                (r["present"] / r["total"] * 100) if r["total"] else 0
+            ),
         }
         for r in course_rows
     ]
@@ -86,12 +180,13 @@ async def get_participation_report(
         f"""
         SELECT
             a.student_name AS student,
-            a.course_code || ' · ' || split_part(a.exam_title, '—', 1) AS exam,
+            a.program AS college,
+            a.course_code || ' · ' || trim(split_part(a.exam_title, '—', 1)) AS exam,
             CASE WHEN a.participated THEN 'Late start' ELSE 'No attempt' END AS reason
         FROM v_exam_attempts a
         WHERE {where_sql}
           AND (NOT a.participated OR a.late_start)
-        ORDER BY a.student_name
+        ORDER BY a.program, a.student_name
         LIMIT 12
         """,
         *args,
@@ -99,6 +194,7 @@ async def get_participation_report(
     absentees = [
         {
             "student": r["student"],
+            "college": (r["college"] or "").strip() or "Unknown",
             "exam": (r["exam"] or "").strip(),
             "reason": r["reason"],
             "minutesLate": 0,
@@ -111,13 +207,18 @@ async def get_participation_report(
         if attendance_by_curriculum
         else None
     )
+    entity = {"college": "college", "curriculum": "curriculum", "exam": "curriculum"}[
+        grain
+    ]
     insight = (
-        f"{weakest['course']} has the weakest attendance at {weakest['attendance']}%."
+        f"{weakest['course']} has the weakest attendance among "
+        f"{entity}s in this view at {weakest['attendance']}%."
         if weakest
         else "No attendance rows in this scope yet."
     )
 
     return {
+        "grain": grain,
         "attemptsPerExam": attempts_per_exam,
         "completionRate": completion_rate,
         "attendanceRate": attendance_rate,

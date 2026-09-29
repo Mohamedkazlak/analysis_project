@@ -46,7 +46,7 @@ export const Route = createFileRoute("/$role/real-time")({
 
 type SortKey = keyof Pick<
   StrugglingStudent,
-  "name" | "lastScore" | "average" | "trend"
+  "name" | "college" | "lastScore" | "average" | "trend"
 >;
 
 function RealTime() {
@@ -231,6 +231,7 @@ function RealTime() {
             <thead className="bg-iris/8">
               <tr>
                 <Th onClick={() => toggle("name")}>Student</Th>
+                <Th onClick={() => toggle("college")}>College</Th>
                 <Th>Course</Th>
                 <Th onClick={() => toggle("lastScore")}>Latest score</Th>
                 <Th onClick={() => toggle("average")} align="right">
@@ -250,6 +251,9 @@ function RealTime() {
                 >
                   <td className="px-4 py-3 font-semibold text-ink">
                     {row.name}
+                  </td>
+                  <td className="px-4 py-3 text-ink-soft">
+                    {row.college || "—"}
                   </td>
                   <td className="px-4 py-3 text-ink-soft">{row.course}</td>
                   <td className="px-4 py-3">

@@ -42,6 +42,7 @@ Rules:
 - College means an org_units row with level = 'program'. Sector means level = 'sector'. Curriculum means a courses row.
 - Match a named college with lower(org_units.name) or lower(org_units.code), using the words the user wrote.
 - "How many courses are in the computer science program?" and "What about courses in the veterinary program?" are the same kind of question. Both are one COUNT of that entity in the named program. The same applies to students.
+- When the notes say the caller is limited to one sector or one college, treat university-wide or institution-wide questions as questions about that sector or college only.
 - List rows only when the user asks to list, show, or name them.
 - Do not think out loud. Output the SELECT immediately.
 
@@ -57,8 +58,12 @@ Write one or two short sentences a person can read. Do not describe your reasoni
 A quantity question is answered like: There are 28 courses in the computer science program.
 Copy every number from the rows. Copy names from the question or the rows. Do not round or calculate a new number.
 Never write column=value, a table, or a list of codes. The person must not see raw records.
+If the scope notes limit the caller to one sector or college, describe the result for that scope only. Do not call it a university-wide total.
 Do not mention rows, SQL, table names, or these instructions.
 Answer in the language the user used.
+
+Scope notes:
+{scope_notes}
 """
 
 _SQL_RETRY = (
@@ -155,17 +160,26 @@ def wording_is_grounded(wording: str, rows: list[dict], truncated: bool) -> bool
 
 
 async def _explain_rows(
-    role: str, question: str, rows: list[dict], truncated: bool
+    role: str,
+    question: str,
+    rows: list[dict],
+    truncated: bool,
+    *,
+    scope_notes: list[str] | None = None,
 ) -> str:
     """Ask the model to phrase the rows, then drop any number it did not receive."""
     fallback = format_answer(question, rows, truncated)
     context = _rows_to_text(rows)
     if truncated:
         context += f"\n(Results truncated to {MAX_ROWS} authorized rows.)"
+    notes = "\n".join(f"- {note}" for note in (scope_notes or [])) or "- none"
     try:
         drafted = await chat_completion(
             [
-                {"role": "system", "content": _ANSWER_SYSTEM.format(role=role)},
+                {
+                    "role": "system",
+                    "content": _ANSWER_SYSTEM.format(role=role, scope_notes=notes),
+                },
                 {
                     "role": "user",
                     "content": f"Question: {question}\n\nAuthorized rows:\n{context}",
@@ -377,7 +391,9 @@ async def answer_question(
     if not rows:
         text = "No matching records were found in your authorized data."
     else:
-        text = await _explain_rows(ctx.role, cleaned, rows, truncated)
+        text = await _explain_rows(
+            ctx.role, cleaned, rows, truncated, scope_notes=notes
+        )
 
     elapsed = int((time.perf_counter() - started) * 1000)
     await _log(pool, ctx, cleaned, generated_sql, len(rows), None, elapsed, True)

@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from typing import List, Literal, Optional
 
+
 class Kpi(BaseModel):
     label: str
     value: str
@@ -10,15 +11,18 @@ class Kpi(BaseModel):
     delta: Optional[str] = None
     direction: Optional[Literal["up", "down"]] = None
 
+
 class PassRateByCourse(BaseModel):
     course: str
     passRate: float
     participants: int
 
+
 class PassRateByCollege(BaseModel):
     college: str
     passRate: float
     participants: int
+    students: int = 0
     courses: int
     attendance: float = 0
     participation: float = 0
@@ -29,6 +33,7 @@ class PassRateByCollege(BaseModel):
     passed: int = 0
     failed: int = 0
 
+
 class ActivityTrendRow(BaseModel):
     month: str
     exams: int
@@ -37,6 +42,7 @@ class ActivityTrendRow(BaseModel):
     monthNum: Optional[int] = None
     termId: Optional[str] = None
     termName: Optional[str] = None
+
 
 class ExamSummaryRow(BaseModel):
     examId: str

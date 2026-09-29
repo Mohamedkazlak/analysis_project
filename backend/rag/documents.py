@@ -26,6 +26,18 @@ _DOCUMENTS = (
         ),
     },
     {
+        "id": "sector-dean-scope",
+        "roles": frozenset({"senior_management"}),
+        "scope_levels": frozenset({"sector"}),
+        "text": (
+            "The caller is a sector dean. Authorized rows are only that sector. "
+            "If the question is about the university, the institution, all colleges, "
+            "or every program, answer for this sector alone. Never include another sector. "
+            "If the question names a different sector, do not invent an answer — "
+            "that request is refused before SQL runs."
+        ),
+    },
+    {
         "id": "university-leadership",
         "roles": frozenset({"senior_management"}),
         "scope_levels": frozenset({"university"}),
@@ -44,13 +56,23 @@ _DOCUMENTS = (
         ),
     },
     {
-        "id": "professor-assignments",
+        "id": "professor-college-scope",
         "roles": frozenset({"professor"}),
         "scope_levels": None,
         "text": (
-            "A professor's data boundary is staff_course_assignments, then the courses, "
-            "offerings, enrollments, and exams that follow from those courses. "
-            "A faculty-wide scope does not grant access to unassigned courses."
+            "The caller is a college professor. Authorized rows are only that college "
+            "(program-level org unit). If the question is about the university, another "
+            "college, or all programs, answer for this college only."
+        ),
+    },
+    {
+        "id": "college-staff-scope",
+        "roles": frozenset({"program_director", "academic_affairs"}),
+        "scope_levels": None,
+        "text": (
+            "The caller works in one college (program-level org unit). "
+            "If the question is about the university or another college, answer only "
+            "for that college. Do not include other colleges."
         ),
     },
     {
@@ -73,4 +95,32 @@ def visible_documents(ctx: UserContext) -> list[str]:
         if allowed_levels is not None and level not in allowed_levels:
             continue
         notes.append(doc["text"])
+    bound = _bound_org_note(ctx)
+    if bound:
+        notes.insert(0, bound)
     return notes
+
+
+def _bound_org_note(ctx: UserContext) -> str | None:
+    """Name the caller's org unit so university-wide wording stays in scope."""
+    if ctx.role == "senior_management" and ctx.scope_level == "sector":
+        name = (ctx.sector_name or "").strip() or "the caller's sector"
+        return (
+            f"Caller sector: {name}. "
+            f"University-wide questions must be answered for {name} only."
+        )
+    if ctx.role == "professor":
+        college = (ctx.college_name or "").strip() or "the caller's college"
+        return (
+            f"Caller college: {college}. "
+            f"University-wide or other-college questions must be answered for "
+            f"{college} only."
+        )
+    if ctx.role in ("program_director", "academic_affairs"):
+        college = (ctx.college_name or "").strip() or "the caller's college"
+        return (
+            f"Caller college: {college}. "
+            f"University-wide or other-college questions must be answered for "
+            f"{college} only."
+        )
+    return None

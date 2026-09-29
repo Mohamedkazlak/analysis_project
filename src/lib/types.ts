@@ -148,6 +148,7 @@ export interface ManagementOverview {
     college: string;
     passRate: number;
     participants: number;
+    students?: number;
     courses: number;
     attendance: number;
     participation: number;
@@ -282,6 +283,7 @@ export interface IntegrityReport {
 }
 
 export interface ParticipationReport {
+  grain?: "college" | "curriculum" | "exam";
   attemptsPerExam: { exam: string; attempts: number; expected: number }[];
   completionRate: number;
   attendanceRate: number;
@@ -289,6 +291,8 @@ export interface ParticipationReport {
     course: string;
     attendance: number;
     absentees: number;
+    students?: number;
+    participated?: number;
   }[];
   avgTimePerExam: { exam: string; minutes: number }[];
   absentees: {
@@ -296,6 +300,7 @@ export interface ParticipationReport {
     exam: string;
     reason: "No attempt" | "Late start";
     minutesLate: number;
+    college?: string;
   }[];
   insight: string;
 }
@@ -311,6 +316,7 @@ export interface CoursePerformanceReport {
     section: string;
     course: string;
     courseCode?: string;
+    college?: string;
     average: number;
     passRate: number;
     enrolled?: number;
@@ -328,6 +334,7 @@ export interface CoursePerformanceReport {
 export interface StrugglingStudent {
   studentId: string;
   name: string;
+  college: string;
   course: string;
   lastScore: number;
   average: number;

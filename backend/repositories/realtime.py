@@ -21,6 +21,7 @@ async def get_real_time_struggling(
         SELECT
             a.student_id,
             a.student_name AS name,
+            MAX(a.program) AS college,
             (ARRAY_AGG(a.course_code ORDER BY a.started_at DESC NULLS LAST))[1] AS course,
             (ARRAY_AGG(a.score ORDER BY a.started_at DESC NULLS LAST))[1]::float AS last_score,
             AVG(a.score)::float AS average
@@ -36,6 +37,7 @@ async def get_real_time_struggling(
         {
             "studentId": r["student_id"],
             "name": r["name"],
+            "college": (r["college"] or "").strip() or "Unknown",
             "course": r["course"],
             "lastScore": float(r["last_score"]),
             "average": round1(r["average"]),

@@ -21,14 +21,16 @@ async def get_course_performance(
             a.course_id,
             a.course_code,
             c.name AS course_name,
+            p.name AS college,
             AVG(a.score)::float AS average,
             COUNT(*) FILTER (WHERE a.score >= {PASS_MARK}) AS passed,
             COUNT(*) AS scored
         FROM v_exam_attempts a
         JOIN courses c ON c.id = a.course_id
+        JOIN org_units p ON p.id = c.program_id
         WHERE {participated}
-        GROUP BY a.course_id, a.course_code, c.name
-        ORDER BY c.name
+        GROUP BY a.course_id, a.course_code, c.name, p.name
+        ORDER BY p.name, c.name
         """,
         *args,
     )
@@ -77,6 +79,7 @@ async def get_course_performance(
                 "section": course_name,
                 "course": course_name,
                 "courseCode": r["course_code"],
+                "college": r["college"] or "Unknown",
                 "average": round1(mean),
                 "passRate": round1(pass_rate),
                 "enrolled": enrolled_by_course.get(r["course_id"], 0),

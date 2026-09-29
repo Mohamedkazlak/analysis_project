@@ -495,7 +495,7 @@ function PresidentCharts({ colleges }: { colleges: CollegeRow[] }) {
                   {row.college}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
-                  {count(row.participants)}
+                  {count(row.students ?? row.participants)}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums">
                   {count(row.passed)}

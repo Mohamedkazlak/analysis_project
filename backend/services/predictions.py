@@ -98,7 +98,7 @@ def current_standing_from_context(
                             "tone": _tone_for(float(attendance), ATTENDANCE_WATCH),
                         },
                         {
-                            "label": "Students who sat",
+                            "label": "Students",
                             "value": str(int(students)),
                             "tone": "iris",
                         },

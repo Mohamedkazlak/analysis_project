@@ -1,7 +1,7 @@
 import asyncpg
 
 from core.utils import PASS_MARK
-from repositories.sql_filters import attempt_where
+from repositories.sql_filters import attempt_where, student_where
 from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 
@@ -13,6 +13,28 @@ async def get_management_overview(
 ) -> dict:
     filters = filters or AnalyticsFilters()
     where_sql, args, _ = attempt_where(filters)
+    stu_where, stu_args, _ = student_where(filters)
+
+    enrolled_rows = await db.fetch(
+        f"""
+        SELECT
+            grouping(s.program) AS g_college,
+            s.program AS college,
+            COUNT(*)::int AS enrolled
+        FROM v_students s
+        WHERE {stu_where}
+        GROUP BY GROUPING SETS ((s.program), ())
+        """,
+        *stu_args,
+    )
+    enrolled_total = int(
+        next((r["enrolled"] for r in enrolled_rows if r["g_college"] == 1), 0) or 0
+    )
+    enrolled_by_college = {
+        r["college"]: int(r["enrolled"] or 0)
+        for r in enrolled_rows
+        if r["g_college"] == 0
+    }
 
     grain_rows = await db.fetch(
         f"""
@@ -84,11 +106,13 @@ async def get_management_overview(
     )
 
     university = next((r for r in standing_rows if r["g_college"] == 1), None)
-    students = int((university["sat"] if university else 0) or 0)
+    sitters = int((university["sat"] if university else 0) or 0)
     expected_students = int((university["students"] if university else 0) or 0)
     passed_students = int((university["passed"] if university else 0) or 0)
     on_time_students = int((university["on_time"] if university else 0) or 0)
-    pass_rate = (passed_students / students * 100) if students else 0
+    # KPI / totals "students" is roster headcount for the filtered scope.
+    students = enrolled_total
+    pass_rate = (passed_students / sitters * 100) if sitters else 0
     attendance = (
         (on_time_students / expected_students * 100) if expected_students else 0
     )
@@ -98,6 +122,7 @@ async def get_management_overview(
     totals = {
         "exams": int(total_exams or 0),
         "students": students,
+        "sitters": sitters,
         "passRate": pass_rate_value,
         "attendance": attendance_value,
         "colleges": 0,
@@ -140,6 +165,7 @@ async def get_management_overview(
                 "college": r["college"],
                 "passRate": round((passed / sat * 100) if sat else 0, 1),
                 "participants": sat,
+                "students": enrolled_by_college.get(r["college"], 0),
                 "courses": courses_by_college.get(r["college"], 0),
                 "attendance": round((on_time / expected * 100) if expected else 0, 1),
                 "participation": round(
@@ -282,14 +308,14 @@ async def get_management_overview(
     ):
         insight = (
             f"University student pass rate is {pass_rate_value:.1f}% across "
-            f"{len(pass_rate_by_college)} colleges and {students} students who sat exams. "
+            f"{len(pass_rate_by_college)} colleges and {students} enrolled students. "
             f"Attendance is {attendance_value:.1f}%."
         )
     elif len(pass_rate_by_college) == 1:
         only = pass_rate_by_college[0]
         insight = (
             f"{only['college']} student pass rate is {only['passRate']}% across "
-            f"{only['participants']} students in this view."
+            f"{only['students'] or only['participants']} enrolled students in this view."
         )
     else:
         weakest = min(pass_rate_by_college, key=lambda r: r["passRate"])

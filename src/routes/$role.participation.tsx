@@ -62,6 +62,30 @@ function Participation() {
   const noShows = data.absentees.filter(
     (a) => a.reason === "No attempt",
   ).length;
+  const grain = data.grain ?? "exam";
+  const attemptsTitle =
+    grain === "college"
+      ? "Attempts per College"
+      : grain === "curriculum"
+        ? "Attempts per Curriculum"
+        : "Attempts per Exam";
+  const timeTitle =
+    grain === "college"
+      ? "Average Time Taken per College"
+      : grain === "curriculum"
+        ? "Average Time Taken per Curriculum"
+        : "Average Time Taken per Exam";
+  const attendanceTitle =
+    grain === "college" ? "Attendance by college" : "Attendance by curriculum";
+  const attendanceLabel = grain === "college" ? "College" : "Curriculum";
+  const categoryCount = Math.max(
+    data.attemptsPerExam.length,
+    data.avgTimePerExam.length,
+    1,
+  );
+  const attemptsHeight = Math.min(360, Math.max(256, categoryCount * 36));
+  const timeHeight = Math.min(480, Math.max(224, categoryCount * 32));
+  const angledLabels = grain !== "exam" || categoryCount > 8;
 
   return (
     <>
@@ -88,12 +112,17 @@ function Participation() {
         />
       </div>
 
-      <Panel title="Attempts per Exam">
-        <div className="h-64">
+      <Panel title={attemptsTitle}>
+        <div style={{ height: attemptsHeight }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data.attemptsPerExam}
-              margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+              margin={{
+                top: 8,
+                right: 8,
+                bottom: angledLabels ? 28 : 0,
+                left: -18,
+              }}
             >
               <CartesianGrid stroke={chartColors.grid} vertical={false} />
               <XAxis
@@ -102,6 +131,9 @@ function Participation() {
                 axisLine={false}
                 tickLine={false}
                 interval={0}
+                angle={angledLabels ? -25 : 0}
+                textAnchor={angledLabels ? "end" : "middle"}
+                height={angledLabels ? 64 : undefined}
               />
               <YAxis
                 tick={{ fontSize: 11, fill: chartColors.axis }}
@@ -136,54 +168,63 @@ function Participation() {
 
       <AiInsight>{data.insight}</AiInsight>
 
-      <Panel title="Average Time Taken per Exam">
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={data.avgTimePerExam}
-              layout="vertical"
-              margin={{ top: 4, right: 16, bottom: 0, left: 30 }}
-            >
-              <CartesianGrid stroke={chartColors.grid} horizontal={false} />
-              <XAxis
-                type="number"
-                tick={{ fontSize: 11, fill: chartColors.axis }}
-                axisLine={false}
-                tickLine={false}
-                unit=" min"
-              />
-              <YAxis
-                type="category"
-                dataKey="exam"
-                tick={{ fontSize: 10, fill: chartColors.axis }}
-                axisLine={false}
-                tickLine={false}
-                width={130}
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v: number) => `${v} min`}
-              />
-              <Bar
-                isAnimationActive={false}
-                dataKey="minutes"
-                name="Minutes"
-                radius={[0, 8, 8, 0]}
-                maxBarSize={22}
-                fill={chartColors.cyan}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+      <Panel title={timeTitle}>
+        <div
+          className={
+            categoryCount > 12 ? "max-h-[28rem] overflow-y-auto" : undefined
+          }
+        >
+          <div style={{ height: timeHeight }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={data.avgTimePerExam}
+                layout="vertical"
+                margin={{ top: 4, right: 16, bottom: 0, left: 8 }}
+              >
+                <CartesianGrid stroke={chartColors.grid} horizontal={false} />
+                <XAxis
+                  type="number"
+                  tick={{ fontSize: 11, fill: chartColors.axis }}
+                  axisLine={false}
+                  tickLine={false}
+                  unit=" min"
+                />
+                <YAxis
+                  type="category"
+                  dataKey="exam"
+                  tick={{ fontSize: 10, fill: chartColors.axis }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={grain === "exam" ? 160 : 140}
+                  interval={0}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v: number) => `${v} min`}
+                />
+                <Bar
+                  isAnimationActive={false}
+                  dataKey="minutes"
+                  name="Minutes"
+                  radius={[0, 8, 8, 0]}
+                  maxBarSize={22}
+                  fill={chartColors.cyan}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </Panel>
 
-      <Panel title="Attendance by curriculum">
+      <Panel title={attendanceTitle}>
         <TableShell>
           <thead className="bg-iris/8">
             <tr>
-              <Th>Curriculum</Th>
+              <Th>{attendanceLabel}</Th>
+              <Th align="right">Students</Th>
+              <Th align="right">Participated</Th>
+              <Th align="right">Absent</Th>
               <Th align="right">Attendance</Th>
-              <Th align="right">Absentees</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -192,11 +233,17 @@ function Participation() {
                 <td className="px-4 py-3 font-semibold text-ink">
                   {row.course}
                 </td>
+                <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                  {(row.students ?? 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                  {(row.participated ?? 0).toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                  {row.absentees.toLocaleString()}
+                </td>
                 <td className="px-4 py-3 text-right font-semibold text-ink">
                   {row.attendance}%
-                </td>
-                <td className="px-4 py-3 text-right text-ink-soft">
-                  {row.absentees}
                 </td>
               </tr>
             ))}
@@ -209,6 +256,7 @@ function Participation() {
           <thead className="bg-iris/8">
             <tr>
               <Th>Student</Th>
+              <Th>College</Th>
               <Th>Assessment</Th>
               <Th>Reason</Th>
               <Th align="right">Minutes late</Th>
@@ -219,6 +267,9 @@ function Participation() {
               <tr key={`${row.student}-${i}`} className="bg-white/40">
                 <td className="px-4 py-3 font-semibold text-ink">
                   {row.student}
+                </td>
+                <td className="px-4 py-3 text-ink-soft">
+                  {row.college || "—"}
                 </td>
                 <td className="px-4 py-3 text-ink-soft">{row.exam}</td>
                 <td className="px-4 py-3">

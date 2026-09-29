@@ -30,27 +30,6 @@ const openers: Record<Role, string> = {
     "Ask me about student performance, attendance and at-risk students across every curriculum in the college.",
 };
 
-const suggestions: Record<Role, string[]> = {
-  student: ["How am I doing vs the class?", "Which topic is dragging me down?"],
-  professor: ["Which questions need review?", "How is section B performing?"],
-  it_academic_integrity: [
-    "Which live exam has flags?",
-    "What drives the highest risk case?",
-  ],
-  senior_management: [
-    "Which college is weakest?",
-    "How are pass rates trending?",
-  ],
-  program_director: [
-    "Which curriculum is weakest?",
-    "Any flagged items this term?",
-  ],
-  academic_affairs: [
-    "Which curriculum has weak attendance?",
-    "Which students are at risk?",
-  ],
-};
-
 function openerFor(role: Role, name: string): string {
   if (role !== "student") return openers[role];
   const given = name
@@ -196,20 +175,6 @@ export function ChatPanel() {
             {pending && (
               <div className="text-[12px] text-ink-soft">Thinking…</div>
             )}
-          </div>
-
-          <div className="flex gap-1.5 overflow-x-auto border-t border-black/5 px-3 py-2 [scrollbar-width:none]">
-            {suggestions[role].map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={pending}
-                onClick={() => send(s)}
-                className="shrink-0 rounded-full border border-ai/30 bg-ai/5 px-2.5 py-1 text-[11px] font-medium text-ai disabled:opacity-40"
-              >
-                {s}
-              </button>
-            ))}
           </div>
 
           <form

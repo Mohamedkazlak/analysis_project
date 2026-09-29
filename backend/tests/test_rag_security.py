@@ -132,8 +132,25 @@ def test_student_query_is_forced_to_their_row():
     assert bind == "s7"
 
 
-def test_professor_query_is_forced_to_assigned_courses():
+def test_professor_query_is_forced_to_their_college():
     sql, bind = guard_sql("SELECT id, full_name FROM students", _professor())
+    assert "program_id = $1" in sql
+    assert bind == "prog-computer-science"
+
+
+def test_professor_without_college_falls_back_to_assigned_courses():
+    ctx = make_user(
+        make_scope(
+            user_id="u-prof-loose",
+            role="professor",
+            person_id="p-tomas",
+            scope_id="prog-computer-science",
+            scope_level="program",
+            college_id=None,
+            course_ids=["c1", "c2"],
+        )
+    )
+    sql, bind = guard_sql("SELECT id FROM students", ctx)
     assert "ANY($1::text[])" in sql
     assert bind == ["c1", "c2"]
 
@@ -222,11 +239,17 @@ def test_documents_are_filtered_before_a_prompt_would_see_them():
     student_notes = "\n".join(visible_documents(_student()))
     dean_notes = "\n".join(visible_documents(_dean()))
     president_notes = "\n".join(visible_documents(_president()))
+    professor_notes = "\n".join(visible_documents(_professor()))
     assert "only be shown their own" in student_notes
     assert "Integrity flags" not in student_notes
     assert "University senior management" not in dean_notes
+    assert "sector dean" in dean_notes.lower() or "Caller sector" in dean_notes
     assert "University senior management" in president_notes
-    assert "Integrity flags" not in "\n".join(visible_documents(_professor()))
+    assert "Integrity flags" not in professor_notes
+    assert (
+        "college professor" in professor_notes.lower()
+        or "Caller college" in professor_notes
+    )
 
 
 def test_who_am_i_uses_the_signed_in_account():
@@ -292,11 +315,115 @@ def test_student_university_headcount_is_refused():
         db.fetch.assert_not_called()
         assert result["blocked"] is True
         assert result["text"] == (
-            "You are not authorized to ask this question. "
-            "I'm here to help answering questions regarding you"
+            "You are only allowed to ask about your own data — your scores, topics, "
+            "or how you compare with the anonymized class average."
         )
 
     asyncio.run(run())
+
+
+def test_student_college_and_sector_questions_are_refused():
+    async def run():
+        db = AsyncMock()
+        questions = [
+            "How many students are in computer science program ?",
+            "Which college is weakest?",
+            "How many students are in this sector?",
+        ]
+        with patch("rag.chat_engine.answer_question", new_callable=AsyncMock) as engine:
+            answers = [
+                await get_chat_answer(_student(), db, question)
+                for question in questions
+            ]
+        engine.assert_not_called()
+        assert all(answer["blocked"] is True for answer in answers)
+        assert all(
+            "only allowed to ask about your own data" in answer["text"]
+            for answer in answers
+        )
+
+    asyncio.run(run())
+
+
+def _health_dean():
+    return make_user(
+        make_scope(
+            user_id="u-dean-health",
+            role="senior_management",
+            person_id="p-nadia",
+            scope_id="sec-health",
+            scope_level="sector",
+            sector_id="sec-health",
+            sector_name="Health Sciences",
+            name="Prof. Dr. Nadia El-Sherif",
+            display_role="Sector Dean",
+        )
+    )
+
+
+def test_sector_dean_cannot_ask_about_another_sector():
+    async def run():
+        db = AsyncMock()
+        questions = [
+            "What about the engineering sector ?",
+            "How many students are in the Engineering sector?",
+            "Tell me about the literature sector",
+            "Compare my sector with all other sectors",
+        ]
+        with patch("rag.chat_engine.answer_question", new_callable=AsyncMock) as engine:
+            answers = [
+                await get_chat_answer(_health_dean(), db, question)
+                for question in questions
+            ]
+        engine.assert_not_called()
+        assert all(answer["blocked"] is True for answer in answers)
+        assert all(
+            "I can only help with your sector — Health Sciences" in answer["text"]
+            for answer in answers
+        )
+
+    asyncio.run(run())
+
+
+def test_sector_dean_own_sector_questions_still_reach_the_engine():
+    async def run():
+        db = AsyncMock()
+        with patch(
+            "rag.chat_engine.answer_question",
+            new_callable=AsyncMock,
+            return_value={"text": "ok", "blocked": False},
+        ) as engine:
+            own = await get_chat_answer(
+                _health_dean(), db, "How many students are in my sector?"
+            )
+            named = await get_chat_answer(
+                _health_dean(),
+                db,
+                "How many students are in the Health Sciences sector?",
+            )
+            president = await get_chat_answer(
+                _president(), db, "What about the engineering sector?"
+            )
+        assert engine.await_count == 3
+        assert own["blocked"] is False
+        assert named["blocked"] is False
+        assert president["blocked"] is False
+
+    asyncio.run(run())
+
+
+def test_student_personal_questions_still_reach_the_engine():
+    from services.chat import classify
+
+    assert classify("How am I doing vs the class?", "student") in {
+        "own_performance",
+        "anonymized_cohort",
+    }
+    assert classify("What is my average?", "student") == "own_performance"
+    assert (
+        classify("How many students are in computer science program ?", "student")
+        == "institution_kpis"
+    )
 
 
 def test_malicious_model_sql_is_not_executed():
@@ -573,7 +700,10 @@ def test_chat_never_shows_raw_rows():
             )
         assert "code=" not in result["text"]
         assert "106VTM" not in result["text"]
-        assert result["text"] == "Based on the available data, there are 2 matching records."
+        assert (
+            result["text"]
+            == "Based on the available data, there are 2 matching records."
+        )
 
     asyncio.run(run())
 

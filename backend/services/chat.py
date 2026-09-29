@@ -78,27 +78,121 @@ _DEFAULT_DOMAIN: dict[str, DataDomain] = {
     "it_academic_integrity": "integrity_monitoring",
 }
 
-# University headcount is an institution KPI. A scoped COUNT(*) would only
-# count the caller's own row and look like a real university total.
+# Org-level questions are institution KPIs for a student. A scoped COUNT(*) would
+# only count the caller's own row and look like a real university / college total.
 _STUDENT_HEADCOUNT = re.compile(
     r"how many students|number of students|كم\s*عدد\s*الطلاب|عدد\s*الطلاب",
     re.IGNORECASE,
 )
-_UNIVERSITY_SCOPE = re.compile(
-    r"\b(university|institution)\b|الجامع[ةه]", re.IGNORECASE
+_ORG_SCOPE = re.compile(
+    r"\b(university|institution|sector|college|program|faculty|department)\b|"
+    r"الجامع[ةه]|القطاع|الكلي[ةه]|البرنامج",
+    re.IGNORECASE,
+)
+_PERSONAL_RECORD = re.compile(
+    r"\b("
+    r"my score|my scores|my average|my grade|my grades|my performance|"
+    r"my topics|how am i|am i doing|compared to (?:the )?class|"
+    r"class average|my cohort"
+    r")\b|درجاتي|معدلي|أدائي|نتائجي",
+    re.IGNORECASE,
 )
 
 STUDENT_OUT_OF_SCOPE = (
-    "You are not authorized to ask this question. "
-    "I'm here to help answering questions regarding you"
+    "You are only allowed to ask about your own data — your scores, topics, "
+    "or how you compare with the anonymized class average."
+)
+
+# Named sectors in the org tree. Matching is deterministic so a sector dean's
+# cross-sector question is refused before the model can treat it as smalltalk.
+_SECTOR_ALIASES: dict[str, tuple[str, ...]] = {
+    "sec-engineering": (
+        "engineering and basic",
+        "basic & applied sciences",
+        "basic and applied sciences",
+        "engineering sector",
+        "eng sector",
+        "sec-engineering",
+        "eng-sec",
+    ),
+    "sec-health": (
+        "health sciences",
+        "health sector",
+        "sec-health",
+        "hlth-sec",
+    ),
+    "sec-humanities": (
+        "literature, arts and humanities",
+        "literature arts and humanities",
+        "arts and humanities",
+        "humanities sector",
+        "literature sector",
+        "sec-humanities",
+        "hum-sec",
+    ),
+}
+_BARE_SECTOR_WORD: dict[str, re.Pattern[str]] = {
+    "sec-engineering": re.compile(r"\bengineering\b", re.IGNORECASE),
+    "sec-health": re.compile(r"\bhealth\b", re.IGNORECASE),
+    "sec-humanities": re.compile(r"\b(?:humanities|literature)\b", re.IGNORECASE),
+}
+_MENTIONS_SECTOR = re.compile(r"\bsectors?\b|القطاع", re.IGNORECASE)
+_OTHER_SECTOR = re.compile(
+    r"\b(?:other|another|different|every|all)\s+sectors?\b|"
+    r"\bsectors?\s+other\s+than\b|"
+    r"خارج\s*قطاعي|قطاع\s*آخر",
+    re.IGNORECASE,
 )
 
 
-def _university_headcount(question: str) -> bool:
+def _norm_org(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").lower()).strip()
+
+
+def _sectors_named_in(question: str) -> set[str]:
+    """Sector ids explicitly named in the question (own or foreign)."""
+    q = _norm_org(question)
+    hits: set[str] = set()
+    for sector_id, aliases in _SECTOR_ALIASES.items():
+        if any(alias in q for alias in aliases):
+            hits.add(sector_id)
+    # Bare words like "engineering" count when the question is about a sector.
+    if _MENTIONS_SECTOR.search(q):
+        for sector_id, pattern in _BARE_SECTOR_WORD.items():
+            if pattern.search(q):
+                hits.add(sector_id)
+    return hits
+
+
+def sector_dean_out_of_scope(ctx: UserContext, question: str) -> str | None:
+    """Refuse when a sector dean asks about another named sector."""
+    if ctx.role != "senior_management" or ctx.scope_level != "sector":
+        return None
+    own = (ctx.sector_id or "").strip()
+    if not own:
+        return None
+    own_name = (ctx.sector_name or "").strip() or "your own sector"
+    if _OTHER_SECTOR.search(question or ""):
+        return (
+            f"I can only help with your sector — {own_name}. "
+            "I can't share another sector's data."
+        )
+    foreign = _sectors_named_in(question) - {own}
+    if not foreign:
+        return None
     return (
-        _STUDENT_HEADCOUNT.search(question) is not None
-        and _UNIVERSITY_SCOPE.search(question) is not None
+        f"I can only help with your sector — {own_name}. "
+        "I can't share another sector's data."
     )
+
+
+def _student_org_level_question(question: str) -> bool:
+    """True when a student asks about university / sector / college aggregates."""
+    if not _ORG_SCOPE.search(question):
+        return False
+    if _PERSONAL_RECORD.search(question):
+        return False
+    return True
 
 
 def classify(question: str, role: str) -> DataDomain:
@@ -109,7 +203,7 @@ def classify(question: str, role: str) -> DataDomain:
         )
     )
     default = _DEFAULT_DOMAIN.get(role, "own_courses")
-    if role == "student" and _university_headcount(q):
+    if role == "student" and _student_org_level_question(q):
         return "institution_kpis"
     if role == "student" and re.search(
         r"\b(all students|every student|other students|another student|all grades)\b",
@@ -173,6 +267,13 @@ async def get_chat_answer(
     reply = static_reply(question, name=ctx.name, display_role=ctx.display_role)
     if reply is not None:
         return {"text": reply, "blocked": False}
+
+    sector_refusal = sector_dean_out_of_scope(ctx, question)
+    if sector_refusal is not None:
+        from rag.chat_engine import _log
+
+        await _log(pool, ctx, question, None, None, "blocked", 0, True)
+        return {"text": sector_refusal, "blocked": True}
 
     domain = classify(question, ctx.role)
     allowed = DOMAIN_ALLOW.get(ctx.role, set())

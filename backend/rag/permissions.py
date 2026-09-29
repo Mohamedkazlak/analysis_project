@@ -149,7 +149,16 @@ def _college_filters() -> dict[str, str]:
             "{ref}.offering_id IN (SELECT o.id FROM course_offerings o "
             "JOIN courses c ON c.id = o.course_id WHERE c.program_id = $1)"
         ),
+        "questions": (
+            "{ref}.exam_id IN (SELECT e.id FROM exams e "
+            "JOIN course_offerings o ON o.id = e.offering_id "
+            "JOIN courses c ON c.id = o.course_id WHERE c.program_id = $1)"
+        ),
         "exam_attempts": "{ref}.student_id IN (SELECT id FROM students WHERE program_id = $1)",
+        "attempt_answers": (
+            "{ref}.attempt_id IN (SELECT a.id FROM exam_attempts a "
+            "JOIN students s ON s.id = a.student_id WHERE s.program_id = $1)"
+        ),
         "transcript_entries": (
             "{ref}.student_id IN (SELECT id FROM students WHERE program_id = $1)"
         ),
@@ -296,6 +305,16 @@ def scope_plan(ctx: UserContext) -> ScopePlan:
             unscoped_ok=CALENDAR,
         )
     if role == "professor":
+        # Bound professors to their college (program). Assigned-course lists alone
+        # would still answer a university-wide headcount from only those courses.
+        if ctx.college_id:
+            return ScopePlan(
+                tables=PROFESSOR_TABLES,
+                filters=_college_filters(),
+                bind=ctx.college_id,
+                must_filter=True,
+                unscoped_ok=frozenset(),
+            )
         if not ctx.course_ids:
             raise QueryRejected(403, "You have no assigned courses")
         return ScopePlan(
