@@ -140,9 +140,7 @@ function RealTime() {
         <StatBlock
           label={isIntegrity ? rt.flaggedInSession : rt.struggling}
           value={`${isIntegrity ? flaggedLive : data.students.length}`}
-          sub={
-            isIntegrity ? rt.liveAnomalies : rt.belowCohortMean
-          }
+          sub={isIntegrity ? rt.liveAnomalies : rt.belowCohortMean}
           tone="rose"
         />
         <StatBlock
@@ -157,9 +155,7 @@ function RealTime() {
 
       <Panel
         title={
-          isIntegrity
-            ? `${rt.liveExams} · ${rt.universityWide}`
-            : rt.liveExams
+          isIntegrity ? `${rt.liveExams} · ${rt.universityWide}` : rt.liveExams
         }
         action={
           <span className="flex items-center gap-2 text-[11px] font-medium text-ink-soft">
@@ -189,7 +185,9 @@ function RealTime() {
                 <td className="px-4 py-3 font-semibold text-ink">
                   {exam.exam}
                 </td>
-                <td className="px-4 py-3 text-ink-soft">{translateOrgName(exam.program, locale)}</td>
+                <td className="px-4 py-3 text-ink-soft">
+                  {translateOrgName(exam.program, locale)}
+                </td>
                 <td className="px-4 py-3 text-right font-semibold text-ink">
                   {exam.activeNow}
                 </td>
