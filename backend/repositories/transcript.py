@@ -48,7 +48,8 @@ async def build_profile_years(db: asyncpg.Connection, student_id: str) -> dict:
                 course=r["course"],
                 code=r["code"],
                 average=float(r["average"]),
-                letter_grade=r["letter_grade"] or letter_from_percent(float(r["average"])),
+                letter_grade=r["letter_grade"]
+                or letter_from_percent(float(r["average"])),
                 credits=int(r["credits"]),
                 counted_in_cumulative_gpa=bool(r["counted_in_cumulative_gpa"]),
                 pass_fail_subject=bool(r["pass_fail_subject"]),
@@ -66,7 +67,13 @@ async def build_profile_years(db: asyncpg.Connection, student_id: str) -> dict:
                 "gpa": gpa.gpa if gpa.gpa is not None else 0.0,
                 "classAverage": year_avg,
                 "examsTaken": len(entries),
-                "passRate": round1(100 * sum(1 for e in entries if e.average >= 60) / len(entries)) if entries else 0,
+                "passRate": (
+                    round1(
+                        100 * sum(1 for e in entries if e.average >= 60) / len(entries)
+                    )
+                    if entries
+                    else 0
+                ),
                 "attendance": 0,
                 "credits": sum(e.credits for e in entries),
                 "standing": standing_from_gpa(gpa.gpa, year_avg),
@@ -82,7 +89,9 @@ async def build_profile_years(db: asyncpg.Connection, student_id: str) -> dict:
                 ],
             }
         )
-        year_trend.append({"year": labels[year_id], "student": year_avg, "cohort": year_avg})
+        year_trend.append(
+            {"year": labels[year_id], "student": year_avg, "cohort": year_avg}
+        )
         for e in entries:
             course_names.setdefault(e.course, {})[year_id] = e.average
 
@@ -104,15 +113,18 @@ async def build_profile_years(db: asyncpg.Connection, student_id: str) -> dict:
         for r in rows
     ]
     cumulative = compute_gpa(all_entries)
+    credit_total = sum(e.credits for e in all_entries)
+    overall_average = (
+        round1(sum(e.average * e.credits for e in all_entries) / credit_total)
+        if credit_total
+        else 0
+    )
     return {
         "years": years,
         "yearTrend": year_trend,
         "courseMatrix": course_matrix,
         "gpa": cumulative.gpa if cumulative.gpa is not None else 0.0,
         "totalCredits": cumulative.gpa_credits,
-        "standing": standing_from_gpa(
-            cumulative.gpa,
-            round1(sum(e.average for e in all_entries) / len(all_entries)) if all_entries else 0,
-        ),
-        "overallAverage": round1(sum(e.average for e in all_entries) / len(all_entries)) if all_entries else 0,
+        "standing": standing_from_gpa(cumulative.gpa, overall_average),
+        "overallAverage": overall_average,
     }

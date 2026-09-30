@@ -43,6 +43,8 @@ export type ExamCollegeRow = {
   avgScore: number;
 };
 
+export type ChartLocale = "en" | "ar";
+
 type PeriodRow = {
   termId?: string;
   termName?: string;
@@ -51,8 +53,110 @@ type PeriodRow = {
   monthNum?: number;
 };
 
+const MONTH_EN = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+const MONTH_AR = [
+  "يناير",
+  "فبراير",
+  "مارس",
+  "أبريل",
+  "مايو",
+  "يونيو",
+  "يوليو",
+  "أغسطس",
+  "سبتمبر",
+  "أكتوبر",
+  "نوفمبر",
+  "ديسمبر",
+] as const;
+
+const MONTH_ALIAS: Record<string, number> = {
+  Jan: 1,
+  January: 1,
+  Feb: 2,
+  February: 2,
+  Mar: 3,
+  March: 3,
+  Apr: 4,
+  April: 4,
+  May: 5,
+  Jun: 6,
+  June: 6,
+  Jul: 7,
+  July: 7,
+  Aug: 8,
+  August: 8,
+  Sep: 9,
+  Sept: 9,
+  September: 9,
+  Oct: 10,
+  October: 10,
+  Nov: 11,
+  November: 11,
+  Dec: 12,
+  December: 12,
+};
+
+const ORG_AR: Record<string, string> = {
+  Engineering: "الهندسة",
+  "Energy Sciences": "علوم الطاقة",
+  "Computer Science": "علوم الحاسب",
+  Medicine: "الطب",
+  Dentistry: "طب الأسنان",
+  "Physical Therapy": "العلاج الطبيعي",
+  Veterinary: "الطب البيطري",
+  "Visual Arts and Design": "الفنون البصرية والتصميم",
+  "Economics and Business Administration": "الاقتصاد وإدارة الأعمال",
+};
+
 function monthSort(row: PeriodRow): number {
   return (row.year ?? 0) * 12 + (row.monthNum ?? 0);
+}
+
+function monthIndex(row: PeriodRow): number | null {
+  if (row.monthNum && row.monthNum >= 1 && row.monthNum <= 12) {
+    return row.monthNum;
+  }
+  if (row.month && MONTH_ALIAS[row.month]) return MONTH_ALIAS[row.month]!;
+  return null;
+}
+
+export function localizeMonthName(
+  month: string | number | null | undefined,
+  locale: ChartLocale = "en",
+): string {
+  if (month == null || month === "") return "";
+  if (typeof month === "number") {
+    const idx = month - 1;
+    if (idx < 0 || idx > 11) return String(month);
+    return locale === "ar" ? MONTH_AR[idx]! : MONTH_EN[idx]!;
+  }
+  const alias = MONTH_ALIAS[month];
+  if (alias) {
+    return locale === "ar" ? MONTH_AR[alias - 1]! : MONTH_EN[alias - 1]!;
+  }
+  return month;
+}
+
+export function localizeOrgName(
+  name: string,
+  locale: ChartLocale = "en",
+): string {
+  if (locale !== "ar") return name;
+  return ORG_AR[name] ?? name;
 }
 
 export function activityMonthKey(row: PeriodRow): string {
@@ -62,8 +166,16 @@ export function activityMonthKey(row: PeriodRow): string {
   return row.month ?? "";
 }
 
-export function activityMonthLabel(row: PeriodRow): string {
-  return row.year && row.month ? `${row.month} ${row.year}` : (row.month ?? "");
+export function activityMonthLabel(
+  row: PeriodRow,
+  locale: ChartLocale = "en",
+): string {
+  const idx = monthIndex(row);
+  if (row.year && idx) {
+    return `${localizeMonthName(idx, locale)} ${row.year}`;
+  }
+  if (row.month) return localizeMonthName(row.month, locale);
+  return "";
 }
 
 export function matchesActivityPeriod(
@@ -100,6 +212,7 @@ export function activitySemesterOptions(rows: PeriodRow[]): {
 export function activityMonthOptions(
   rows: PeriodRow[],
   semesterId: string,
+  locale: ChartLocale = "en",
 ): { value: string; label: string }[] {
   const scoped =
     semesterId === "all"
@@ -113,7 +226,7 @@ export function activityMonthOptions(
     seen.add(value);
     options.push({
       value,
-      label: activityMonthLabel(row),
+      label: activityMonthLabel(row, locale),
       sort: monthSort(row),
     });
   }
@@ -126,12 +239,13 @@ export function filterActivityTrend(
   rows: ActivityTrendRow[],
   semesterId: string,
   monthKey: string,
+  locale: ChartLocale = "en",
 ): ActivityChartPoint[] {
   return rows
     .filter((row) => matchesActivityPeriod(row, semesterId, monthKey))
     .sort((a, b) => monthSort(a) - monthSort(b))
     .map((row) => ({
-      label: activityMonthLabel(row),
+      label: activityMonthLabel(row, locale),
       exams: row.exams,
       participants: row.participants,
     }));
@@ -192,14 +306,17 @@ export function examsByCollege(rows: ExamSummaryRow[]): ExamCollegeRow[] {
     .sort((a, b) => b.exams - a.exams || a.college.localeCompare(b.college));
 }
 
-export function examScoreRows(rows: ExamSummaryRow[]) {
+export function examScoreRows(
+  rows: ExamSummaryRow[],
+  locale: ChartLocale = "en",
+) {
   return [...rows]
     .sort((a, b) => a.avgScore - b.avgScore || a.course.localeCompare(b.course))
     .map((row) => ({
       ...row,
       label:
         row.month && row.year
-          ? `${row.course} · ${row.month} ${row.year}`
+          ? `${row.course} · ${activityMonthLabel(row, locale)}`
           : row.course,
       passRate: row.sittings
         ? Math.round((row.passed / row.sittings) * 1000) / 10
@@ -208,26 +325,30 @@ export function examScoreRows(rows: ExamSummaryRow[]) {
 }
 
 /** Latest month compared with the month before it in the visible series. */
-export function monthExamChange(rows: ActivityChartPoint[]): {
+export function monthExamChange(
+  rows: ActivityChartPoint[],
+  locale: ChartLocale = "en",
+): {
   label: string;
   value: string;
   sub: string;
   tone: "ink" | "mint" | "rose";
   sentence: string | null;
 } {
+  const ar = locale === "ar";
   const last = rows[rows.length - 1];
   if (!last) {
     return {
-      label: "Change from previous month",
+      label: ar ? "التغير عن الشهر السابق" : "Change from previous month",
       value: "—",
-      sub: "No exams in this view",
+      sub: ar ? "لا امتحانات في هذا العرض" : "No exams in this view",
       tone: "ink",
       sentence: null,
     };
   }
   if (rows.length < 2) {
     return {
-      label: "Exams this month",
+      label: ar ? "امتحانات هذا الشهر" : "Exams this month",
       value: last.exams.toLocaleString(),
       sub: last.label,
       tone: "ink",
@@ -237,7 +358,7 @@ export function monthExamChange(rows: ActivityChartPoint[]): {
   const prev = rows[rows.length - 2];
   if (!prev) {
     return {
-      label: "Exams this month",
+      label: ar ? "امتحانات هذا الشهر" : "Exams this month",
       value: last.exams.toLocaleString(),
       sub: last.label,
       tone: "ink",
@@ -245,33 +366,53 @@ export function monthExamChange(rows: ActivityChartPoint[]): {
     };
   }
   const delta = last.exams - prev.exams;
-  const countLabel = `${Math.abs(delta)} ${Math.abs(delta) === 1 ? "exam" : "exams"}`;
+  const abs = Math.abs(delta);
   if (delta === 0) {
     return {
-      label: "Change from previous month",
-      value: "No change",
-      sub: `${last.label} and ${prev.label} both had ${last.exams}`,
+      label: ar ? "التغير عن الشهر السابق" : "Change from previous month",
+      value: ar ? "بدون تغير" : "No change",
+      sub: ar
+        ? `${last.label} و${prev.label} كلاهما ${last.exams}`
+        : `${last.label} and ${prev.label} both had ${last.exams}`,
       tone: "ink",
-      sentence: `${last.label} had the same ${last.exams} exams as ${prev.label}.`,
+      sentence: ar
+        ? `${last.label} فيها نفس عدد امتحانات ${prev.label} وهو ${last.exams}.`
+        : `${last.label} had the same ${last.exams} exams as ${prev.label}.`,
     };
   }
   return {
-    label: "Change from previous month",
-    value: delta > 0 ? `${delta} more` : `${Math.abs(delta)} fewer`,
-    sub: `${last.label} had ${last.exams} · ${prev.label} had ${prev.exams}`,
+    label: ar ? "التغير عن الشهر السابق" : "Change from previous month",
+    value: ar
+      ? delta > 0
+        ? `أكثر بـ ${delta}`
+        : `أقل بـ ${abs}`
+      : delta > 0
+        ? `${delta} more`
+        : `${abs} fewer`,
+    sub: ar
+      ? `${last.label}: ${last.exams} · ${prev.label}: ${prev.exams}`
+      : `${last.label} had ${last.exams} · ${prev.label} had ${prev.exams}`,
     tone: delta > 0 ? "mint" : "rose",
-    sentence: `${last.label} had ${last.exams} exams, ${countLabel} ${delta > 0 ? "more" : "fewer"} than ${prev.label}.`,
+    sentence: ar
+      ? `${last.label} فيها ${last.exams} امتحانًا، ${delta > 0 ? `أكثر بـ ${abs}` : `أقل بـ ${abs}`} من ${prev.label}.`
+      : `${last.label} had ${last.exams} exams, ${abs} ${abs === 1 ? "exam" : "exams"} ${delta > 0 ? "more" : "fewer"} than ${prev.label}.`,
   };
 }
 
 export function examActivityInsight(
   exams: ExamSummaryRow[],
   chartRows: ActivityChartPoint[],
+  locale: ChartLocale = "en",
 ): { headline: string; body: string } {
+  const ar = locale === "ar";
   if (!exams.length && !chartRows.length) {
     return {
-      headline: "No exams in this view yet",
-      body: "There are no recorded exams for this month or semester, so there is nothing to report on.",
+      headline: ar
+        ? "لا امتحانات في هذا العرض بعد"
+        : "No exams in this view yet",
+      body: ar
+        ? "لا توجد امتحانات مسجّلة لهذا الشهر أو الفصل، لذلك لا يوجد ما يمكن الإبلاغ عنه."
+        : "There are no recorded exams for this month or semester, so there is nothing to report on.",
     };
   }
 
@@ -289,31 +430,45 @@ export function examActivityInsight(
   const last = chartRows[chartRows.length - 1];
 
   const headline = last
-    ? `${last.exams} exams and ${last.participants.toLocaleString()} students sat in ${last.label}`
-    : `${exams.length} exams in this view`;
+    ? ar
+      ? `${last.exams} امتحانًا و${last.participants.toLocaleString()} طالبًا أدوا في ${last.label}`
+      : `${last.exams} exams and ${last.participants.toLocaleString()} students sat in ${last.label}`
+    : ar
+      ? `${exams.length} امتحانًا في هذا العرض`
+      : `${exams.length} exams in this view`;
 
   const parts: string[] = [];
-  const change = monthExamChange(chartRows).sentence;
+  const change = monthExamChange(chartRows, locale).sentence;
   if (change) parts.push(change);
   if (sat) {
     parts.push(
-      `Across ${sittings.toLocaleString()} sittings, ${passRate}% passed, with ${failed.toLocaleString()} fails and ${absent.toLocaleString()} absences.`,
+      ar
+        ? `عبر ${sittings.toLocaleString()} جلوسًا، نجح ${passRate}%، مع ${failed.toLocaleString()} رسوبًا و${absent.toLocaleString()} غيابًا.`
+        : `Across ${sittings.toLocaleString()} sittings, ${passRate}% passed, with ${failed.toLocaleString()} fails and ${absent.toLocaleString()} absences.`,
     );
   }
   if (busiest) {
+    const college = localizeOrgName(busiest.college, locale);
     parts.push(
-      `${busiest.college} administered the most exams here (${busiest.exams}).`,
+      ar
+        ? `${college} أجرت أكبر عدد من الامتحانات هنا (${busiest.exams}).`
+        : `${college} administered the most exams here (${busiest.exams}).`,
     );
   }
   if (weakest) {
     parts.push(
-      `The lowest mean score is ${weakest.avgScore}% on ${weakest.course} ${weakest.title}.`,
+      ar
+        ? `أدنى متوسط درجة هو ${weakest.avgScore}% في ${weakest.course} ${weakest.title}.`
+        : `The lowest mean score is ${weakest.avgScore}% on ${weakest.course} ${weakest.title}.`,
     );
   }
 
   return {
     headline,
     body:
-      parts.join(" ") || "Exam activity is available for the selected period.",
+      parts.join(" ") ||
+      (ar
+        ? "نشاط الامتحانات متاح للفترة المحددة."
+        : "Exam activity is available for the selected period."),
   };
 }

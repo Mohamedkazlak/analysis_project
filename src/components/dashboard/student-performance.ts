@@ -67,17 +67,40 @@ export function semesterPassRateNote(
   coverage: ReturnType<typeof semesterCoverage>,
   currentTerm: string | null,
   previousTerm: string | null,
+  copy?: {
+    thisSemester: string;
+    lastSemester: string;
+    both: string;
+    currentOnly: string;
+    previousOnly: string;
+    none: string;
+  },
 ): string {
-  const current = currentTerm ?? "this semester";
-  const previous = previousTerm ?? "last semester";
+  const current = currentTerm ?? copy?.thisSemester ?? "this semester";
+  const previous = previousTerm ?? copy?.lastSemester ?? "last semester";
   if (coverage === "both") {
-    return `Pass rate of scored sittings in ${current} compared with ${previous}.`;
+    return (
+      copy?.both ??
+      "Pass rate of scored sittings in {current} compared with {previous}."
+    )
+      .replace("{current}", current)
+      .replace("{previous}", previous);
   }
   if (coverage === "current") {
-    return `Pass rate of scored sittings in ${current}. This college has no scored exams in ${previous}.`;
+    return (
+      copy?.currentOnly ??
+      "Pass rate of scored sittings in {current}. This college has no scored exams in {previous}."
+    )
+      .replace("{current}", current)
+      .replace("{previous}", previous);
   }
   if (coverage === "previous") {
-    return `Pass rate of scored sittings in ${previous}. This college has no scored exams in ${current}.`;
+    return (
+      copy?.previousOnly ??
+      "Pass rate of scored sittings in {previous}. This college has no scored exams in {current}."
+    )
+      .replace("{current}", current)
+      .replace("{previous}", previous);
   }
-  return "No scored exams in this college for these semesters.";
+  return copy?.none ?? "No scored exams in this college for these semesters.";
 }

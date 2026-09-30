@@ -101,6 +101,7 @@ async def get_student_dashboard(
             "sector": "",
             "termName": "",
             "average": 0,
+            "overallAverage": None,
             "gpa": None,
             "classAverage": 0,
             "bestTopic": "None",
@@ -204,18 +205,36 @@ async def get_student_dashboard(
 
     transcript = await build_profile_years(db, student["id"])
     gpa = transcript["gpa"] if transcript["totalCredits"] else None
+    overall_average = transcript["overallAverage"] if transcript["years"] else None
     college = student["program"] or "Unknown"
     compared = "above" if average >= class_average else "below"
-    if semester and gpa is not None:
+    if semester and gpa is not None and overall_average is not None:
+        insight = (
+            f"You are in {college}. This semester ({term_name}) your average is "
+            f"{average}, {compared} the class average of {class_average}. "
+            f"All-years average is {overall_average}. Cumulative GPA is {gpa}."
+        )
+    elif semester and gpa is not None:
         insight = (
             f"You are in {college}. This semester ({term_name}) your average is "
             f"{average}, {compared} the class average of {class_average}. "
             f"Cumulative GPA is {gpa}."
         )
+    elif semester and overall_average is not None:
+        insight = (
+            f"You are in {college}. This semester ({term_name}) your average is "
+            f"{average}, {compared} the class average of {class_average}. "
+            f"All-years average is {overall_average}."
+        )
     elif semester:
         insight = (
             f"You are in {college}. This semester ({term_name}) your average is "
             f"{average}, {compared} the class average of {class_average}."
+        )
+    elif overall_average is not None:
+        insight = (
+            f"You are in {college}. No exams are recorded for the current semester. "
+            f"All-years average is {overall_average}."
         )
     else:
         insight = (
@@ -228,6 +247,7 @@ async def get_student_dashboard(
         "sector": student["sector"] or "",
         "termName": term_name,
         "average": average,
+        "overallAverage": overall_average,
         "gpa": gpa,
         "classAverage": class_average,
         "bestTopic": best_topic,

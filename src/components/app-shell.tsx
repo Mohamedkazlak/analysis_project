@@ -12,26 +12,50 @@ import {
   rolesAllowedForPath,
 } from "@/lib/auth/role-guards";
 import { AnalyticsFilters } from "@/components/dashboard/analytics-filters";
+import {
+  useLocale,
+  translateOrgName,
+  translatePersonTitle,
+  translateScopeLabel,
+} from "@/lib/i18n";
 
 const BRAND_LOGO = "/brand-logo.png";
 
 function AffiliationParts({ affiliation }: { affiliation: UserAffiliation }) {
+  const { locale, messages } = useLocale();
   if (!affiliation.sector && !affiliation.college) {
-    return <span className="text-ink-soft">{affiliation.label}</span>;
+    return (
+      <span className="text-ink-soft">
+        {translateScopeLabel(affiliation.label, locale, messages.scope)}
+      </span>
+    );
   }
   return (
     <span className="text-ink-soft">
-      {affiliation.sector && <span>{affiliation.sector}</span>}
+      {affiliation.sector && (
+        <span>{translateOrgName(affiliation.sector, locale)}</span>
+      )}
       {affiliation.sector && affiliation.college && (
         <span className="mx-1.5 text-ink-soft/50">·</span>
       )}
-      {affiliation.college && <span>{affiliation.college}</span>}
+      {affiliation.college && (
+        <span>{translateOrgName(affiliation.college, locale)}</span>
+      )}
     </span>
   );
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { role, user, displayRole, affiliation } = useRole();
+  const {
+    locale,
+    messages,
+    toggleLocale,
+    tNavGroup,
+    tNavLabel,
+    tNavTitle,
+    tRole,
+  } = useLocale();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const groups = navByRole[role];
@@ -40,6 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const current = groups
     .flatMap((g) => g.items)
     .find((item) => (item.to === "/" ? report === "/" : item.to === report));
+  const shownRole = messages.roles[role] ?? displayRole;
 
   // Deep-linking into another role's report sends the user to their own home.
   useEffect(() => {
@@ -56,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen w-full text-ink">
       <div className="flex">
-        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col gap-1 border-r border-white/70 bg-white/55 px-5 py-6 backdrop-blur-2xl md:flex">
+        <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col gap-1 border-e border-white/70 bg-white/55 px-5 py-6 backdrop-blur-2xl md:flex">
           <div className="mb-6 flex items-center gap-2.5">
             <img
               className="h-11 w-auto shrink-0 object-contain"
@@ -68,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 BNU
               </div>
               <div className="mt-1 text-[10px] font-semibold text-ink-soft">
-                AI-driven Dashboard
+                {messages.shell.brandSubtitle}
               </div>
             </div>
           </div>
@@ -76,7 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {groups.map((group) => (
             <div key={group.group} className="mb-2">
               <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-soft">
-                {group.group}
+                {tNavGroup(group.group)}
               </div>
               {group.items.map((item) => {
                 const active =
@@ -100,7 +125,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                         active ? "bg-iris" : "bg-ink-soft/40",
                       )}
                     />
-                    {item.label}
+                    {tNavLabel(item.label)}
                   </Link>
                 );
               })}
@@ -108,16 +133,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           ))}
 
           <div className="mt-auto rounded-2xl border border-white/70 bg-white/60 p-3.5">
-            <div className="flex items-center gap-2.5">
-              <div className="font-display grid size-9 place-items-center rounded-full bg-violet/15 text-[12px] font-bold text-plum">
+            <div className="flex items-center gap-2.5 rtl:flex-row-reverse">
+              <div className="font-display grid size-9 shrink-0 place-items-center rounded-full bg-violet/15 text-[12px] font-bold text-plum">
                 {user.initials}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1 text-start">
                 <div className="text-[12px] font-semibold leading-tight">
-                  {user.name}
+                  {translatePersonTitle(user.name, locale)}
                 </div>
                 <div className="mt-0.5 text-[10px] font-semibold text-iris">
-                  {displayRole}
+                  {shownRole}
                 </div>
                 <div className="mt-0.5 truncate text-[10px] text-ink-soft">
                   <AffiliationParts affiliation={affiliation} />
@@ -139,24 +164,30 @@ export function AppShell({ children }: { children: ReactNode }) {
                 BNU
               </div>
               <div className="mt-0.5 text-[10px] font-semibold text-ink-soft">
-                AI-driven Dashboard
+                {messages.shell.brandSubtitle}
               </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-semibold uppercase tracking-[0.14em]">
-                <span className="text-iris">{displayRole}</span>
+                <span className="text-iris">{shownRole}</span>
                 <span className="text-ink-soft/40" aria-hidden>
                   |
                 </span>
                 {!affiliation.sector && !affiliation.college ? (
-                  <span className="text-ink-soft">{affiliation.label}</span>
+                  <span className="text-ink-soft">
+                    {translateScopeLabel(
+                      affiliation.label,
+                      locale,
+                      messages.scope,
+                    )}
+                  </span>
                 ) : (
                   <>
                     {affiliation.sector && (
                       <span className="text-ink-soft">
-                        {affiliation.sector}
+                        {translateOrgName(affiliation.sector, locale)}
                       </span>
                     )}
                     {affiliation.sector && affiliation.college && (
@@ -166,17 +197,31 @@ export function AppShell({ children }: { children: ReactNode }) {
                     )}
                     {affiliation.college && (
                       <span className="text-ink-soft">
-                        {affiliation.college}
+                        {translateOrgName(affiliation.college, locale)}
                       </span>
                     )}
                   </>
                 )}
               </div>
               <h1 className="font-display mt-1 text-2xl font-extrabold text-ink">
-                {current?.title ?? "Reports"}
+                {current ? tNavTitle(current.title) : messages.shell.reports}
               </h1>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={toggleLocale}
+                aria-label={
+                  locale === "en"
+                    ? messages.shell.switchToArabic
+                    : messages.shell.switchToEnglish
+                }
+                className="rounded-full border border-white/80 bg-white/70 px-4 py-2 text-[12px] font-semibold text-iris backdrop-blur-xl hover:bg-white"
+              >
+                {locale === "en"
+                  ? messages.shell.switchToArabic
+                  : messages.shell.switchToEnglish}
+              </button>
               <button
                 onClick={() => {
                   clearAuthToken();
@@ -184,11 +229,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 }}
                 className="flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-4 py-2 text-[12px] font-semibold text-iris backdrop-blur-xl hover:bg-white"
               >
-                Log out
+                {messages.shell.logOut}
               </button>
               {role !== "student" && (
                 <button className="rounded-full bg-iris px-4 py-2 text-[12px] font-semibold text-white shadow-lg shadow-iris/25">
-                  Export Report
+                  {messages.shell.exportReport}
                 </button>
               )}
             </div>
@@ -212,7 +257,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   search={{}}
                   className="rounded-full border border-white/80 bg-white/70 px-3 py-1.5 text-[12px] font-medium text-ink-soft"
                 >
-                  {item.label}
+                  {tNavLabel(item.label)}
                 </Link>
               ))}
           </nav>

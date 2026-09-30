@@ -14,7 +14,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  Legend,
   Line,
   LineChart,
   Pie,
@@ -45,6 +44,19 @@ import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters"
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { roleGuard } from "@/lib/auth/role-guards";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
+import {
+  useLocale,
+  translateOrgName,
+  translateStanding,
+  translateTermName,
+} from "@/lib/i18n";
+import {
+  AngledCategoryTick,
+  AxisValueTick,
+  ChartLegend,
+  MirroredChart,
+  tooltipMirrorStyle,
+} from "@/components/dashboard/chart-rtl";
 
 export const Route = createFileRoute("/$role/performance")({
   beforeLoad: roleGuard("/performance"),
@@ -73,6 +85,11 @@ type SortKey = keyof Pick<
 >;
 
 function PerformanceReport() {
+  const { locale, messages } = useLocale();
+  const rtl = locale === "ar";
+  const c = messages.common;
+  const pp = messages.performancePage;
+  const o = messages.overview;
   const { filters, filtersReady, queryKey, enabled } = useFilteredQuery(
     "student-performance",
   );
@@ -93,9 +110,18 @@ function PerformanceReport() {
   if (!filtersReady) return <FiltersRequiredNotice />;
   if (isPending || !data) return <ScreenSkeleton cards={4} panels={3} />;
 
-  const scoreColleges = collegeOptions(data.averageByExam);
-  const rankedColleges = collegeOptions(data.ranked);
-  const passColleges = collegeOptions(data.semesterComparison);
+  const scoreColleges = collegeOptions(data.averageByExam).map((opt) => ({
+    ...opt,
+    label: translateOrgName(opt.label, locale),
+  }));
+  const rankedColleges = collegeOptions(data.ranked).map((opt) => ({
+    ...opt,
+    label: translateOrgName(opt.label, locale),
+  }));
+  const passColleges = collegeOptions(data.semesterComparison).map((opt) => ({
+    ...opt,
+    label: translateOrgName(opt.label, locale),
+  }));
   const activeScoreCollege = selectedCollege(scoreColleges, scoreCollege);
   const activePassCollege = selectedCollege(passColleges, passCollege);
   const scoreRows = examChartRows(
@@ -104,14 +130,24 @@ function PerformanceReport() {
   const passRows = examChartRows(
     filterByCollege(data.semesterComparison, activePassCollege),
   );
+  const currentTermLabel = translateTermName(data.currentTerm, locale);
+  const previousTermLabel = translateTermName(data.previousTerm, locale);
   const passNote = semesterPassRateNote(
     semesterCoverage(passRows),
-    data.currentTerm,
-    data.previousTerm,
+    currentTermLabel || null,
+    previousTermLabel || null,
+    {
+      thisSemester: c.thisSemester,
+      lastSemester: c.lastSemester,
+      both: pp.passNoteBoth,
+      currentOnly: pp.passNoteCurrentOnly,
+      previousOnly: pp.passNotePreviousOnly,
+      none: pp.passNoteNone,
+    },
   );
 
   const courseOptions = [
-    { value: "all", label: "All curriculums" },
+    { value: "all", label: messages.filters.allCurriculum },
     ...Array.from(
       new Set(filterByCollege(data.ranked, rankedCollege).map((r) => r.course)),
     ).map((c) => ({
@@ -146,9 +182,23 @@ function PerformanceReport() {
     }
   };
 
-  const passed = data.passFail[0]!.value;
-  const failed = data.passFail[1]!.value;
-  const passRate = ((passed / (passed + failed)) * 100).toFixed(1);
+  const passed = data.passFail[0]?.value ?? 0;
+  const failed = data.passFail[1]?.value ?? 0;
+  const passFailData = [
+    { name: o.passed, value: passed },
+    { name: o.failed, value: failed },
+  ];
+  const scoredTotal = passed + failed;
+  const passRate = scoredTotal
+    ? ((passed / scoredTotal) * 100).toFixed(1)
+    : "—";
+  const cohortAverage =
+    data.averageByExam.length === 0
+      ? "—"
+      : (
+          data.averageByExam.reduce((a, b) => a + b.average, 0) /
+          data.averageByExam.length
+        ).toFixed(1);
 
   return (
     <>
@@ -156,38 +206,38 @@ function PerformanceReport() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatBlock
-          label="Highest score"
+          label={pp.highest}
           value={`${data.highest.score}`}
           sub={`${data.highest.name} · ${data.highest.exam}`}
           tone="mint"
         />
         <StatBlock
-          label="Lowest score"
+          label={pp.lowest}
           value={`${data.lowest.score}`}
           sub={`${data.lowest.name} · ${data.lowest.exam}`}
           tone="rose"
         />
         <StatBlock
-          label="Pass rate"
-          value={`${passRate}%`}
-          sub={`${passed} passed · ${failed} failed`}
+          label={o.passRate}
+          value={passRate === "—" ? "—" : `${passRate}%`}
+          sub={`${passed} ${o.passed} · ${failed} ${o.failed}`}
           tone="iris"
         />
         <StatBlock
-          label="Cohort average"
-          value={`${(data.averageByExam.reduce((a, b) => a + b.average, 0) / data.averageByExam.length).toFixed(1)}`}
-          sub="Across 6 assessments"
+          label={c.cohortAverage}
+          value={`${cohortAverage}`}
+          sub={pp.acrossAssessments}
         />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel
-          title="Average Score by Test"
+          title={pp.avgByTest}
           className="lg:col-span-2"
           action={
             scoreColleges.length > 1 ? (
               <Select
-                label="College"
+                label={o.college}
                 value={activeScoreCollege}
                 options={scoreColleges}
                 onChange={setScoreCollege}
@@ -195,60 +245,66 @@ function PerformanceReport() {
             ) : null
           }
         >
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={scoreRows}
-                margin={{ top: 8, right: 8, bottom: 8, left: -18 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 10, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-35}
-                  textAnchor="end"
-                  height={64}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[0, 100]}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value: number, _name, item) => {
-                    const exam = (
-                      item?.payload as { exam?: string } | undefined
-                    )?.exam;
-                    return [
-                      `${Number(value).toFixed(1)}%`,
-                      exam ? `Average · ${exam}` : "Average",
-                    ];
-                  }}
-                />
-                <Bar
-                  isAnimationActive={false}
-                  dataKey="average"
-                  name="Average"
-                  radius={[10, 10, 0, 0]}
-                  maxBarSize={46}
-                  fill={chartColors.iris}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <MirroredChart rtl={rtl} height={288}>
+            <BarChart
+              data={scoreRows}
+              margin={{ top: 8, right: 8, bottom: 8, left: -18 }}
+            >
+              <CartesianGrid stroke={chartColors.grid} vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={(props) => <AngledCategoryTick {...props} mirror={rtl} />}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                height={64}
+              />
+              <YAxis
+                tick={(props) => (
+                  <AxisValueTick
+                    x={props.x}
+                    y={props.y}
+                    payload={props.payload}
+                    mirror={rtl}
+                    dy={4}
+                  />
+                )}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, 100]}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+                formatter={(value: number, _name, item) => {
+                  const exam = (item?.payload as { exam?: string } | undefined)
+                    ?.exam;
+                  return [
+                    `${Number(value).toFixed(1)}%`,
+                    exam
+                      ? pp.tooltipAverageExam.replace("{exam}", exam)
+                      : pp.tooltipAverage,
+                  ];
+                }}
+              />
+              <Bar
+                isAnimationActive={false}
+                dataKey="average"
+                name={c.average}
+                radius={[10, 10, 0, 0]}
+                maxBarSize={46}
+                fill={chartColors.iris}
+              />
+            </BarChart>
+          </MirroredChart>
         </Panel>
 
-        <Panel title="Pass / Fail Split">
-          <div className="h-64">
+        <Panel title={pp.passFailSplit}>
+          <div style={{ height: 220 }} className="w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={data.passFail}
+                  data={passFailData}
                   dataKey="value"
                   nameKey="name"
                   innerRadius="58%"
@@ -260,56 +316,75 @@ function PerformanceReport() {
                   <Cell fill={chartColors.rose} />
                 </Pie>
                 <Tooltip contentStyle={tooltipStyle} />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
-                />
               </PieChart>
             </ResponsiveContainer>
           </div>
+          <ChartLegend
+            items={[
+              { label: o.passed, color: chartColors.mint },
+              { label: o.failed, color: chartColors.rose },
+            ]}
+          />
         </Panel>
       </div>
 
       <AiDecisionSection />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Score Distribution">
-          <div className="h-60">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data.distribution}
-                margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                <XAxis
-                  dataKey="bucket"
-                  tick={{ fontSize: 10, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar
-                  isAnimationActive={false}
-                  dataKey="students"
-                  name="Students"
-                  radius={[8, 8, 0, 0]}
-                  fill={chartColors.violet}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+        <Panel title={pp.scoreDistribution}>
+          <MirroredChart rtl={rtl} height={240}>
+            <BarChart
+              data={data.distribution}
+              margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+            >
+              <CartesianGrid stroke={chartColors.grid} vertical={false} />
+              <XAxis
+                dataKey="bucket"
+                tick={(props) => (
+                  <AxisValueTick
+                    x={props.x}
+                    y={props.y}
+                    payload={props.payload}
+                    mirror={rtl}
+                  />
+                )}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={(props) => (
+                  <AxisValueTick
+                    x={props.x}
+                    y={props.y}
+                    payload={props.payload}
+                    mirror={rtl}
+                    dy={4}
+                  />
+                )}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+              />
+              <Bar
+                isAnimationActive={false}
+                dataKey="students"
+                name={o.students}
+                radius={[8, 8, 0, 0]}
+                fill={chartColors.violet}
+              />
+            </BarChart>
+          </MirroredChart>
         </Panel>
 
         <Panel
-          title="Exam pass rates by semester"
+          title={pp.passRatesBySemester}
           action={
             passColleges.length > 1 ? (
               <Select
-                label="College"
+                label={o.college}
                 value={activePassCollege}
                 options={passColleges}
                 onChange={setPassCollege}
@@ -318,82 +393,96 @@ function PerformanceReport() {
           }
         >
           <p className="mb-3 text-[12px] text-ink-soft">{passNote}</p>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={passRows}
-                margin={{ top: 8, right: 8, bottom: 8, left: -18 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fontSize: 10, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  interval={0}
-                  angle={-35}
-                  textAnchor="end"
-                  height={64}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[0, 100]}
-                  unit="%"
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value: number, name: string) => [
-                    `${Number(value).toFixed(1)}%`,
-                    name,
-                  ]}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
-                />
-                <Line
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="current"
-                  name={data.currentTerm ?? "This semester"}
-                  stroke={chartColors.iris}
-                  strokeWidth={2.5}
-                  connectNulls={false}
-                  dot={{ r: 3 }}
-                />
-                <Line
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="previous"
-                  name={data.previousTerm ?? "Last semester"}
-                  stroke={chartColors.cyan}
-                  strokeWidth={2}
-                  strokeDasharray="5 4"
-                  connectNulls={false}
-                  dot={{ r: 3 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          <MirroredChart rtl={rtl} height={260}>
+            <LineChart
+              data={passRows}
+              margin={{ top: 8, right: 8, bottom: 8, left: -18 }}
+            >
+              <CartesianGrid stroke={chartColors.grid} vertical={false} />
+              <XAxis
+                dataKey="label"
+                tick={(props) => <AngledCategoryTick {...props} mirror={rtl} />}
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                height={64}
+              />
+              <YAxis
+                tick={(props) => (
+                  <AxisValueTick
+                    x={props.x}
+                    y={props.y}
+                    payload={props.payload}
+                    mirror={rtl}
+                    dy={4}
+                    suffix="%"
+                  />
+                )}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, 100]}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+                formatter={(value: number, name: string) => [
+                  `${Number(value).toFixed(1)}%`,
+                  name,
+                ]}
+              />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="current"
+                name={currentTermLabel || c.thisSemester}
+                stroke={chartColors.iris}
+                strokeWidth={2.5}
+                connectNulls={false}
+                dot={{ r: 3 }}
+              />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="previous"
+                name={previousTermLabel || c.lastSemester}
+                stroke={chartColors.cyan}
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                connectNulls={false}
+                dot={{ r: 3 }}
+              />
+            </LineChart>
+          </MirroredChart>
+          <ChartLegend
+            items={[
+              {
+                label: currentTermLabel || c.thisSemester,
+                color: chartColors.iris,
+              },
+              {
+                label: previousTermLabel || c.lastSemester,
+                color: chartColors.cyan,
+              },
+            ]}
+          />
         </Panel>
       </div>
 
       <Panel
-        title="Ranked Student Performance"
+        title={pp.rankedTitle}
         action={
           <FilterBar>
             <SearchInput
               value={query}
               onChange={setQuery}
-              placeholder="Find a student…"
+              placeholder={c.findStudent}
             />
             {rankedColleges.length > 1 ? (
               <Select
-                label="College"
+                label={o.college}
                 value={rankedCollege}
                 options={[
-                  { value: "all", label: "All colleges" },
+                  { value: "all", label: messages.filters.allColleges },
                   ...rankedColleges,
                 ]}
                 onChange={(value) => {
@@ -403,7 +492,7 @@ function PerformanceReport() {
               />
             ) : null}
             <Select
-              label="Curriculum"
+              label={messages.filters.curriculum}
               value={
                 courseOptions.some((option) => option.value === course)
                   ? course
@@ -413,17 +502,19 @@ function PerformanceReport() {
               onChange={setCourse}
             />
             <Select
-              label="Result"
+              label={c.result}
               value={status}
               options={[
-                { value: "all", label: "All students" },
-                { value: "Pass", label: "Passing" },
-                { value: "Fail", label: "Failing" },
+                { value: "all", label: messages.filters.allStudents },
+                { value: "Pass", label: c.passing },
+                { value: "Fail", label: c.failing },
               ]}
               onChange={setStatus}
             />
             <span className="text-[11px] font-medium text-ink-soft">
-              {sorted.length} of {data.ranked.length} · click a header to sort
+              {pp.sortHint
+                .replace("{n}", String(sorted.length))
+                .replace("{total}", String(data.ranked.length))}
             </span>
           </FilterBar>
         }
@@ -431,17 +522,17 @@ function PerformanceReport() {
         <TableShell>
           <thead className="bg-iris/8">
             <tr>
-              <Th onClick={() => toggle("rank")}>Rank</Th>
-              <Th onClick={() => toggle("name")}>Student</Th>
-              <Th>Course</Th>
-              <Th onClick={() => toggle("average")}>Avg score</Th>
+              <Th onClick={() => toggle("rank")}>{c.rank}</Th>
+              <Th onClick={() => toggle("name")}>{c.student}</Th>
+              <Th>{c.course}</Th>
+              <Th onClick={() => toggle("average")}>{c.averageScore}</Th>
               <Th onClick={() => toggle("best")} align="right">
-                Best
+                {locale === "ar" ? "الأفضل" : "Best"}
               </Th>
               <Th onClick={() => toggle("trend")} align="right">
-                Trend
+                {c.trend}
               </Th>
-              <Th align="right">Status</Th>
+              <Th align="right">{c.status}</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -473,7 +564,7 @@ function PerformanceReport() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Badge tone={row.status === "Pass" ? "pass" : "fail"}>
-                    {row.status}
+                    {translateStanding(row.status, messages.standing)}
                   </Badge>
                 </td>
               </tr>

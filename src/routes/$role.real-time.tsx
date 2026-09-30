@@ -22,6 +22,7 @@ import type { StrugglingStudent } from "@/lib/types";
 import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { roleGuard } from "@/lib/auth/role-guards";
+import { useLocale, translateOrgName } from "@/lib/i18n";
 
 export const Route = createFileRoute("/$role/real-time")({
   beforeLoad: roleGuard("/real-time"),
@@ -51,12 +52,17 @@ type SortKey = keyof Pick<
 
 function RealTime() {
   const { role } = useRole();
+  const { locale, messages } = useLocale();
+  const c = messages.common;
+  const rt = messages.realTimePage;
+  const o = messages.overview;
+
   const isIntegrity = role === "it_academic_integrity";
   const { filters, filtersReady, queryKey, enabled } =
     useFilteredQuery("real-time");
   const { data, isPending, dataUpdatedAt } = useQuery({
-    queryKey,
-    queryFn: () => getRealTimeStruggling(filters),
+    queryKey: [...queryKey, locale],
+    queryFn: () => getRealTimeStruggling(filters, locale),
     enabled,
     refetchInterval: 15000,
   });
@@ -84,7 +90,7 @@ function RealTime() {
   if (isPending || !data) return <ScreenSkeleton cards={3} panels={2} />;
 
   const courseOptions = [
-    { value: "all", label: "All curriculums" },
+    { value: "all", label: messages.filters.allCurriculum },
     ...Array.from(new Set(data.students.map((s) => s.course))).map((c) => ({
       value: c,
       label: c,
@@ -123,23 +129,26 @@ function RealTime() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBlock
-          label="Active now"
+          label={rt.inSession}
           value={`${data.activeNow}`}
-          sub={`${data.liveExams.length} sittings in progress`}
+          sub={rt.sittingsInProgress.replace(
+            "{n}",
+            String(data.liveExams.length),
+          )}
           tone="iris"
         />
         <StatBlock
-          label={isIntegrity ? "Flagged in session" : "Struggling"}
+          label={isIntegrity ? rt.flaggedInSession : rt.struggling}
           value={`${isIntegrity ? flaggedLive : data.students.length}`}
           sub={
-            isIntegrity ? "Live anomalies" : "Recent score below cohort mean"
+            isIntegrity ? rt.liveAnomalies : rt.belowCohortMean
           }
           tone="rose"
         />
         <StatBlock
-          label="Last updated"
+          label={rt.lastUpdated}
           value={clock || "—"}
-          sub="Auto-refreshes every 15s"
+          sub={rt.autoRefresh}
           tone="mint"
         />
       </div>
@@ -149,26 +158,26 @@ function RealTime() {
       <Panel
         title={
           isIntegrity
-            ? "Live exams · university-wide"
-            : "Live sittings · my curriculum"
+            ? `${rt.liveExams} · ${rt.universityWide}`
+            : rt.liveExams
         }
         action={
           <span className="flex items-center gap-2 text-[11px] font-medium text-ink-soft">
             <span className="size-1.5 animate-pulse rounded-full bg-mint" />{" "}
-            Live · {clock}
+            {rt.liveClock.replace("{clock}", clock)}
           </span>
         }
       >
         <TableShell>
           <thead className="bg-iris/8">
             <tr>
-              <Th>Exam</Th>
-              <Th>College</Th>
-              <Th align="right">Active</Th>
-              <Th align="right">Submitted</Th>
-              <Th align="right">Expected</Th>
-              <Th align="right">Flagged</Th>
-              <Th align="right">Status</Th>
+              <Th>{c.exam}</Th>
+              <Th>{o.college}</Th>
+              <Th align="right">{rt.active}</Th>
+              <Th align="right">{rt.submitted}</Th>
+              <Th align="right">{rt.expected}</Th>
+              <Th align="right">{rt.flaggedCol}</Th>
+              <Th align="right">{c.status}</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -180,7 +189,7 @@ function RealTime() {
                 <td className="px-4 py-3 font-semibold text-ink">
                   {exam.exam}
                 </td>
-                <td className="px-4 py-3 text-ink-soft">{exam.program}</td>
+                <td className="px-4 py-3 text-ink-soft">{translateOrgName(exam.program, locale)}</td>
                 <td className="px-4 py-3 text-right font-semibold text-ink">
                   {exam.activeNow}
                 </td>
@@ -199,7 +208,9 @@ function RealTime() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <Badge tone={exam.status === "Closing" ? "warn" : "neutral"}>
-                    {exam.status}
+                    {exam.status === "Closing"
+                      ? rt.statusClosing
+                      : rt.statusInProgress}
                   </Badge>
                 </td>
               </tr>
@@ -210,16 +221,16 @@ function RealTime() {
 
       {!isIntegrity && (
         <Panel
-          title="Students currently struggling"
+          title={rt.strugglingTitle}
           action={
             <FilterBar>
               <SearchInput
                 value={query}
                 onChange={setQuery}
-                placeholder="Find a student…"
+                placeholder={c.findStudent}
               />
               <Select
-                label="Curriculum"
+                label={messages.filters.curriculum}
                 value={course}
                 options={courseOptions}
                 onChange={setCourse}
@@ -230,17 +241,17 @@ function RealTime() {
           <TableShell>
             <thead className="bg-iris/8">
               <tr>
-                <Th onClick={() => toggle("name")}>Student</Th>
-                <Th onClick={() => toggle("college")}>College</Th>
-                <Th>Course</Th>
-                <Th onClick={() => toggle("lastScore")}>Latest score</Th>
+                <Th onClick={() => toggle("name")}>{c.student}</Th>
+                <Th onClick={() => toggle("college")}>{o.college}</Th>
+                <Th>{c.course}</Th>
+                <Th onClick={() => toggle("lastScore")}>{rt.lastScore}</Th>
                 <Th onClick={() => toggle("average")} align="right">
-                  Average
+                  {c.average}
                 </Th>
                 <Th onClick={() => toggle("trend")} align="right">
-                  Trend
+                  {c.trend}
                 </Th>
-                <Th align="right">Last activity</Th>
+                <Th align="right">{rt.lastActivity}</Th>
               </tr>
             </thead>
             <tbody className="divide-y divide-black/5">
@@ -253,7 +264,7 @@ function RealTime() {
                     {row.name}
                   </td>
                   <td className="px-4 py-3 text-ink-soft">
-                    {row.college || "—"}
+                    {row.college ? translateOrgName(row.college, locale) : "—"}
                   </td>
                   <td className="px-4 py-3 text-ink-soft">{row.course}</td>
                   <td className="px-4 py-3">
@@ -276,7 +287,11 @@ function RealTime() {
                     {row.trend >= 0 ? "▲" : "▼"} {Math.abs(row.trend)}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Badge tone="neutral">{row.lastActivity}</Badge>
+                    <Badge tone="neutral">
+                      {row.lastActivity === "recently"
+                        ? rt.recently
+                        : row.lastActivity}
+                    </Badge>
                   </td>
                 </tr>
               ))}

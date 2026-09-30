@@ -19,12 +19,12 @@ import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { roleGuard } from "@/lib/auth/role-guards";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import { useRole } from "@/components/role-context";
+import { useLocale, translateOrgName, translateStanding } from "@/lib/i18n";
 import {
   coursesCurriculumSubtitle,
   coursesScopeMessage,
   coursesScopeReady,
   courseStanding,
-  courseStandingLabel,
   filterByStanding,
   sortComparisonRows,
   toggleComparisonSort,
@@ -58,6 +58,10 @@ export const Route = createFileRoute("/$role/courses")({
 
 function CoursePerformance() {
   const { role, viewer } = useRole();
+  const { locale, messages } = useLocale();
+  const c = messages.common;
+  const cp = messages.coursesPage;
+  const o = messages.overview;
   const { filters, filtersReady, queryKey, enabled } =
     useFilteredQuery("course-performance");
   const scopeReady = coursesScopeReady(role, filters, viewer.level);
@@ -71,7 +75,7 @@ function CoursePerformance() {
   const [asc, setAsc] = useState(true);
 
   if (!filtersReady || !scopeReady) {
-    return <FiltersRequiredNotice message={coursesScopeMessage(role)} />;
+    return <FiltersRequiredNotice message={coursesScopeMessage(role, cp)} />;
   }
   if (isPending || !data) return <ScreenSkeleton cards={4} panels={1} />;
 
@@ -115,25 +119,25 @@ function CoursePerformance() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatBlock
-          label="Curriculum"
+          label={cp.curriculum}
           value={courseRows.length.toLocaleString()}
-          sub={coursesCurriculumSubtitle(role, filters, viewer.level)}
+          sub={coursesCurriculumSubtitle(role, filters, viewer.level, cp)}
         />
         <StatBlock
-          label="Average score"
+          label={c.averageScore}
           value={`${overallAverage}`}
-          sub="Mean of course averages"
+          sub={cp.meanAverages}
           tone="iris"
         />
         <StatBlock
-          label="Enrollments"
+          label={c.enrollments}
           value={totalEnrolled.toLocaleString()}
-          sub="Total across these courses"
+          sub={cp.totalEnrollments}
         />
         <StatBlock
-          label="On track"
+          label={c.onTrack}
           value={`${onTrackCount}/${sections.length || 0}`}
-          sub="Pass rate 75% or above"
+          sub={cp.onTrackSub}
           tone={
             onTrackCount === sections.length && sections.length
               ? "mint"
@@ -145,16 +149,16 @@ function CoursePerformance() {
       <AiDecisionSection />
 
       <Panel
-        title="Section Comparison"
+        title={cp.sectionComparison}
         action={
           <FilterBar>
             <Select
-              label="Standing"
+              label={c.standing}
               value={standing}
               options={[
-                { value: "all", label: "All courses" },
-                { value: "on_track", label: "On track" },
-                { value: "needs_support", label: "Needs support" },
+                { value: "all", label: c.allCourses },
+                { value: "on_track", label: c.onTrack },
+                { value: "needs_support", label: c.needsSupport },
               ]}
               onChange={(value) => setStanding(value as StandingFilter)}
             />
@@ -165,22 +169,22 @@ function CoursePerformance() {
           <thead className="bg-iris/8">
             <tr>
               <Th onClick={() => toggleSort("college")}>
-                {header("college", "College")}
+                {header("college", o.college)}
               </Th>
               <Th onClick={() => toggleSort("course")}>
-                {header("course", "Course")}
+                {header("course", c.course)}
               </Th>
               <Th align="right" onClick={() => toggleSort("enrolled")}>
-                {header("enrolled", "Enrollments")}
+                {header("enrolled", c.enrollments)}
               </Th>
               <Th onClick={() => toggleSort("average")}>
-                {header("average", "Average")}
+                {header("average", c.average)}
               </Th>
               <Th align="right" onClick={() => toggleSort("passRate")}>
-                {header("passRate", "Pass rate")}
+                {header("passRate", o.passRate)}
               </Th>
               <Th align="right" onClick={() => toggleSort("standing")}>
-                {header("standing", "Standing")}
+                {header("standing", c.standing)}
               </Th>
             </tr>
           </thead>
@@ -194,12 +198,14 @@ function CoursePerformance() {
                     className="bg-white/40"
                   >
                     <td className="px-4 py-3 text-ink-soft">
-                      {row.college || "—"}
+                      {row.college
+                        ? translateOrgName(row.college, locale)
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 font-semibold text-ink">
                       {row.course}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-ink-soft">
+                    <td className="px-4 py-3 text-end tabular-nums text-ink-soft">
                       {(row.enrolled ?? 0).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
@@ -210,12 +216,12 @@ function CoursePerformance() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right text-ink-soft">
+                    <td className="px-4 py-3 text-end text-ink-soft">
                       {row.passRate}%
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-end">
                       <Badge tone={status === "on_track" ? "pass" : "fail"}>
-                        {courseStandingLabel(status)}
+                        {translateStanding(status, messages.standing)}
                       </Badge>
                     </td>
                   </tr>
@@ -227,7 +233,7 @@ function CoursePerformance() {
                   colSpan={6}
                   className="px-4 py-6 text-center text-[13px] text-ink-soft"
                 >
-                  No courses match this standing filter.
+                  {cp.noMatch}
                 </td>
               </tr>
             )}

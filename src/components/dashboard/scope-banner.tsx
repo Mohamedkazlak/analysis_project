@@ -1,8 +1,15 @@
 import { useRole } from "../role-context";
 import { useAnalyticsFilters } from "./use-analytics-filters";
+import {
+  useLocale,
+  translateOrgName,
+  translatePersonTitle,
+  translateScopeLabel,
+} from "@/lib/i18n";
 
 export function ScopeBanner() {
   const { role, viewer } = useRole();
+  const { locale, messages } = useLocale();
   const { options, filters } = useAnalyticsFilters();
   if (role === "senior_management") return null;
   const sector = options?.sectors.find((s) => s.id === filters.sectorId)?.name;
@@ -16,15 +23,15 @@ export function ScopeBanner() {
     (c) => c.id === filters.curriculumId,
   );
   const parts = [
-    viewer.label,
-    sector,
-    college,
-    professor,
+    translateScopeLabel(viewer.label, locale, messages.scope),
+    sector ? translateOrgName(sector, locale) : null,
+    college ? translateOrgName(college, locale) : null,
+    professor ? translatePersonTitle(professor, locale) : null,
     curriculum ? `${curriculum.code}` : null,
   ].filter(Boolean);
   return (
     <div className="rounded-2xl border border-iris/20 bg-iris/8 px-4 py-2.5 text-[12px] font-medium text-iris">
-      Viewing · {parts.join(" · ")}
+      {messages.scope.viewing} · {parts.join(" · ")}
     </div>
   );
 }

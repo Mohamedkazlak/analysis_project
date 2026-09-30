@@ -90,6 +90,17 @@ def build_evidence(role: str, data: dict[str, Any]) -> list[dict]:
                     dataset="student_dashboard",
                 ),
             )
+        overall = dashboard.get("overallAverage")
+        if overall is not None:
+            _add(
+                metrics,
+                _metric(
+                    "overall_average",
+                    overall,
+                    entity=dashboard.get("studentName") or "You",
+                    dataset="transcript_entries",
+                ),
+            )
         for row in dashboard.get("scoreTimeline") or []:
             _add(
                 metrics,

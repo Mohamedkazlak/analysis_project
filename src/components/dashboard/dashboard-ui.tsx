@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { Kpi } from "@/lib/types";
+import { useLocale } from "@/lib/i18n";
 
 export function Panel({
   title,
@@ -98,6 +99,7 @@ export function AiInsight({
   headline?: string;
   size?: "md" | "lg";
 }) {
+  const { messages, locale } = useLocale();
   const large = size === "lg";
   return (
     <div
@@ -114,14 +116,14 @@ export function AiInsight({
       >
         ✦
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1" dir={locale === "ar" ? "rtl" : "ltr"}>
         <div
           className={cn(
             "font-bold uppercase tracking-[0.14em] text-ai",
             large ? "text-[12px]" : "text-[11px]",
           )}
         >
-          AI Insight
+          {messages.ai.insight}
         </div>
         {headline ? (
           <h3
@@ -190,7 +192,10 @@ export function Meter({
   };
   return (
     <div
-      className={cn("h-1.5 w-24 shrink-0 rounded-full bg-black/10", className)}
+      className={cn(
+        "flex h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-black/10",
+        className,
+      )}
     >
       <div
         className={cn("h-full rounded-full", map[tone])}
@@ -210,7 +215,7 @@ export function TableShell({
   return (
     <div className="overflow-x-auto rounded-2xl border border-black/5">
       <table
-        className={cn("w-full min-w-[640px] text-left text-[13px]", className)}
+        className={cn("w-full min-w-[640px] text-start text-[13px]", className)}
       >
         {children}
       </table>
@@ -232,7 +237,7 @@ export function Th({
       onClick={onClick}
       className={cn(
         "px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-soft",
-        align === "right" && "text-right",
+        align === "right" ? "text-end" : "text-start",
         onClick && "cursor-pointer select-none hover:text-iris",
       )}
     >

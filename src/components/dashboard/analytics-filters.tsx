@@ -2,9 +2,12 @@ import { FilterBar, Select } from "@/components/dashboard/dashboard-ui";
 import { useAnalyticsFilters } from "@/components/dashboard/use-analytics-filters";
 import { useRole } from "@/components/role-context";
 import { defaultVisible } from "@/lib/filter-types";
+import { useLocale, translateOrgName, translatePersonTitle } from "@/lib/i18n";
 
 export function AnalyticsFilters() {
   const { role, viewer } = useRole();
+  const { locale, messages } = useLocale();
+  const f = messages.filters;
   const {
     filters,
     options,
@@ -31,33 +34,39 @@ export function AnalyticsFilters() {
   const sectorOptions = [
     {
       value: "",
-      label: required.includes("sectorId") ? "Select sector" : "All sectors",
+      label: required.includes("sectorId") ? f.selectSector : f.allSectors,
     },
-    ...(options?.sectors ?? []).map((s) => ({ value: s.id, label: s.name })),
+    ...(options?.sectors ?? []).map((s) => ({
+      value: s.id,
+      label: translateOrgName(s.name, locale),
+    })),
   ];
   const collegeOptions = [
     {
       value: "",
-      label: required.includes("collegeId") ? "Select college" : "All colleges",
+      label: required.includes("collegeId") ? f.selectCollege : f.allColleges,
     },
-    ...(options?.colleges ?? []).map((s) => ({ value: s.id, label: s.name })),
+    ...(options?.colleges ?? []).map((s) => ({
+      value: s.id,
+      label: translateOrgName(s.name, locale),
+    })),
   ];
   const professorOptions = [
-    { value: "", label: "All professors" },
+    { value: "", label: f.allProfessors },
     ...(options?.professors ?? []).map((p) => ({
       value: p.id,
-      label: p.name,
+      label: translatePersonTitle(p.name, locale),
     })),
   ];
   const curriculumOptions = [
-    { value: "", label: "All curriculum" },
+    { value: "", label: f.allCurriculum },
     ...(options?.curricula ?? []).map((c) => ({
       value: c.id,
       label: `${c.code} · ${c.name}`,
     })),
   ];
   const studentOptions = [
-    { value: "", label: "All students" },
+    { value: "", label: f.allStudents },
     ...(options?.students ?? []).map((s) => ({ value: s.id, label: s.name })),
   ];
 
@@ -66,7 +75,7 @@ export function AnalyticsFilters() {
       <FilterBar>
         {showSector ? (
           <Select
-            label="Sector"
+            label={f.sector}
             value={filters.sectorId ?? ""}
             options={sectorOptions}
             onChange={setSectorId}
@@ -74,7 +83,7 @@ export function AnalyticsFilters() {
         ) : null}
         {showCollege ? (
           <Select
-            label="College"
+            label={f.college}
             value={filters.collegeId ?? ""}
             options={collegeOptions}
             onChange={setCollegeId}
@@ -82,7 +91,7 @@ export function AnalyticsFilters() {
         ) : null}
         {showProfessor ? (
           <Select
-            label="Professor"
+            label={f.professor}
             value={filters.professorId ?? ""}
             options={professorOptions}
             onChange={setProfessorId}
@@ -90,7 +99,7 @@ export function AnalyticsFilters() {
         ) : null}
         {showCurriculum ? (
           <Select
-            label="Curriculum"
+            label={f.curriculum}
             value={filters.curriculumId ?? ""}
             options={curriculumOptions}
             onChange={setCurriculumId}
@@ -99,19 +108,19 @@ export function AnalyticsFilters() {
         {showStudent ? (
           <>
             <Select
-              label="Student"
+              label={f.student}
               value={filters.studentId ?? ""}
               options={studentOptions}
               onChange={setStudentId}
             />
             <label className="flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-3 py-1.5 backdrop-blur-xl">
               <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-soft">
-                Search
+                {f.search}
               </span>
               <input
                 value={studentQuery}
                 onChange={(e) => setStudentQuery(e.target.value)}
-                placeholder="Name or number"
+                placeholder={f.searchPlaceholder}
                 className="w-28 bg-transparent text-[11px] font-semibold text-ink outline-none"
               />
             </label>
@@ -120,27 +129,21 @@ export function AnalyticsFilters() {
       </FilterBar>
       {showStudent && options?.hasMoreStudents ? (
         <p className="text-[12px] text-ink-soft">
-          Showing the first {options.studentPageSize ?? 150} matching students.
-          Search to find others — this limit is not an access control.
+          {f.studentsCap.replace("{n}", String(options.studentPageSize ?? 150))}
         </p>
       ) : null}
       {!filtersReady ? (
-        <p className="text-[12px] text-ink-soft">
-          Select the required filters to load analytics for that scope.
-        </p>
+        <p className="text-[12px] text-ink-soft">{f.required}</p>
       ) : null}
     </div>
   );
 }
 
-export function FiltersRequiredNotice({
-  message = "Select the required filters to load analytics for that scope.",
-}: {
-  message?: string;
-}) {
+export function FiltersRequiredNotice({ message }: { message?: string }) {
+  const { messages } = useLocale();
   return (
     <div className="rounded-2xl border border-iris/20 bg-iris/8 px-4 py-3 text-[13px] text-ink-soft">
-      {message}
+      {message ?? messages.filters.required}
     </div>
   );
 }

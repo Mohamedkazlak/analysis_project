@@ -26,9 +26,7 @@ import type { Recommendation } from "@/lib/ai/recommendations";
 import { useRole } from "./role-context";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { ROLE_SLUG, roleRouteTo } from "@/lib/auth/role-guards";
-
-const EMPTY_COPY =
-  "Not enough data yet to generate insights — check back after your next exam.";
+import { useLocale, translateOrgName } from "@/lib/i18n";
 
 export function AiFrame({
   label,
@@ -85,6 +83,7 @@ const levelTone = {
 
 function RiskCaseRow({ item }: { item: RiskCase }) {
   const [open, setOpen] = useState(false);
+  const { messages } = useLocale();
   return (
     <div className="rounded-2xl border border-white/70 bg-white/65 p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -108,7 +107,7 @@ function RiskCaseRow({ item }: { item: RiskCase }) {
             aria-expanded={open}
             className="inline-flex items-center gap-1 rounded-full border border-ai/40 px-2.5 py-1 text-[11px] font-semibold text-ai"
           >
-            Why
+            {messages.ai.why}
             <ChevronDown
               className={cn(
                 "size-3.5 transition-transform",
@@ -150,9 +149,10 @@ const toneClass = {
 
 /** Compact inline standing or forecast strip. Values come from the decision payload. */
 export function AiPrediction({ data }: { data: Prediction }) {
+  const { messages } = useLocale();
   const Icon = dirIcon[data.direction];
   const heading =
-    data.kind === "forecast" ? data.title : data.title || "Current standing";
+    data.kind === "forecast" ? data.title : data.title || messages.ai.standing;
   return (
     <div className="mt-3 rounded-2xl border border-white/70 bg-white/55 px-3.5 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -196,6 +196,7 @@ export function AiPrediction({ data }: { data: Prediction }) {
 
 function BasedOn({ item }: { item: Recommendation }) {
   const [open, setOpen] = useState(false);
+  const { messages } = useLocale();
   return (
     <div className="mt-1">
       <button
@@ -203,7 +204,7 @@ function BasedOn({ item }: { item: Recommendation }) {
         aria-expanded={open}
         className="inline-flex items-center gap-1 text-[11px] font-semibold text-ai/90 underline decoration-ai/30 underline-offset-2"
       >
-        Based on
+        {messages.ai.basedOn}
         <ChevronDown
           className={cn("size-3 transition-transform", open && "rotate-180")}
         />
@@ -245,6 +246,7 @@ export function ConfirmDialog({
 }) {
   const navigate = useNavigate();
   const { role } = useRole();
+  const { messages } = useLocale();
   function confirm() {
     onClose();
     if (action.to) {
@@ -279,7 +281,7 @@ export function ConfirmDialog({
             onClick={onClose}
             className="rounded-full border border-black/10 px-4 py-2 text-[12px] font-semibold text-ink"
           >
-            Cancel
+            {messages.ai.cancel}
           </button>
           <button
             onClick={confirm}
@@ -305,6 +307,7 @@ export function ConfirmDialog({
 
 export function AiEvidence({ metrics }: { metrics: EvidenceMetric[] }) {
   const [open, setOpen] = useState(false);
+  const { locale, messages } = useLocale();
   if (!metrics.length) return null;
   return (
     <div className="mt-2">
@@ -312,7 +315,7 @@ export function AiEvidence({ metrics }: { metrics: EvidenceMetric[] }) {
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 text-[11px] font-semibold text-ai"
       >
-        Based on
+        {messages.ai.basedOn}
         <ChevronDown
           className={cn("size-3.5 transition-transform", open && "rotate-180")}
         />
@@ -322,13 +325,13 @@ export function AiEvidence({ metrics }: { metrics: EvidenceMetric[] }) {
           {metrics.slice(0, 6).map((metric) => (
             <li key={metric.id} className="text-[12px] text-ink-soft">
               <span className="font-semibold text-ink">
-                {metric.entity || metric.name}
+                {translateOrgName(metric.entity || metric.name, locale)}
               </span>
               {" · "}
               {metric.name.replace(/_/g, " ")} {metric.value}
               {metric.unit === "percent" ? "%" : ""}
               {metric.comparison?.scopeAverage != null
-                ? ` · scope average ${metric.comparison.scopeAverage}`
+                ? ` · ${messages.ai.scopeAverage} ${metric.comparison.scopeAverage}`
                 : ""}
             </li>
           ))}
@@ -343,10 +346,11 @@ export function AiWarnings({
 }: {
   warnings: { id: string; text: string; tone: "amber" | "rose" }[];
 }) {
+  const { messages } = useLocale();
   return (
     <div className="mt-4 space-y-2">
       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-amberink">
-        Warnings
+        {messages.ai.warnings}
       </div>
       {warnings.map((w) => (
         <div
@@ -373,14 +377,15 @@ export function AiRecommendations({
   items: Recommendation[];
   onAction: (item: Recommendation) => void;
 }) {
+  const { messages } = useLocale();
   return (
     <div className="mt-5">
       <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-ai">
-        Recommended actions
+        {messages.ai.recommendedActions}
       </div>
       {items.length === 0 ? (
         <p className="mt-2 text-[13px] text-ink-soft">
-          No actions needed right now — you're on track.
+          {messages.ai.noActions}
         </p>
       ) : (
         <ul className="mt-3 space-y-2.5">
@@ -428,14 +433,15 @@ export function AiDecisionCard({
   insightId?: string;
 }) {
   const { role: contextRole, user } = useRole();
+  const { locale, messages } = useLocale();
   const role = roleProp ?? contextRole;
   const traceId = insightId ?? `insight-${role}-${user.id}`;
   const [pendingItem, setPendingItem] = useState<Recommendation | null>(null);
   const { filters, filtersReady, queryKey, enabled } =
     useFilteredQuery("ai-decision");
   const { data, isPending } = useQuery({
-    queryKey: [...queryKey, role, traceId],
-    queryFn: () => getAiDecision(filters),
+    queryKey: [...queryKey, role, traceId, locale],
+    queryFn: () => getAiDecision(filters, locale),
     enabled,
     retry: false,
     staleTime: 30_000,
@@ -443,7 +449,8 @@ export function AiDecisionCard({
       query.state.data?.narrationStatus === "pending" ? 4000 : false,
   });
 
-  const label = role === "student" ? "Recommendations" : "AI decision";
+  const label =
+    role === "student" ? messages.ai.recommendations : messages.ai.decision;
 
   if (!filtersReady) return null;
   if (isPending) return <AiSkeleton label={label} />;
@@ -452,7 +459,10 @@ export function AiDecisionCard({
     return (
       <AiFrame label={label}>
         <p className="mt-2 text-[13px] text-ink-soft">
-          {data.message || "AI analysis is taking longer than expected."}
+          {data.message ||
+            (data.status === "timeout"
+              ? messages.ai.timeout
+              : messages.ai.unavailable)}
         </p>
       </AiFrame>
     );
@@ -472,8 +482,8 @@ export function AiDecisionCard({
       <AiFrame label={label}>
         <p className="mt-2 text-[13px] text-ink-soft">
           {data?.dataStatus === "insufficient"
-            ? "Not enough recorded data in this scope to produce an insight."
-            : EMPTY_COPY}
+            ? messages.ai.insufficient
+            : messages.ai.empty}
         </p>
       </AiFrame>
     );
@@ -497,7 +507,7 @@ export function AiDecisionCard({
 
       {data?.narrationStatus === "pending" && (
         <p className="mt-2 text-[11px] text-ink-soft">
-          Showing verified figures. Wording is still being refined.
+          {messages.ai.narrationPending}
         </p>
       )}
 
@@ -517,7 +527,7 @@ export function AiDecisionCard({
 
       {insight?.action && <AiAction {...insight.action} />}
       <p className="mt-3 text-[11px] text-ink-soft">
-        Traced to {traceId} · every action asks you to confirm first.
+        {messages.ai.traced} {traceId} · {messages.ai.confirmFirst}
       </p>
       {pendingItem && (
         <ConfirmDialog

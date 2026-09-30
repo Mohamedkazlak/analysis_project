@@ -83,6 +83,7 @@ export const AI_REQUEST_TIMEOUT_MS = 12000;
 
 export async function getAiDecision(
   filters: AnalyticsFilters,
+  language: "en" | "ar" = "en",
 ): Promise<AiDecision> {
   try {
     return await fetchFromBackend<AiDecision>("/api/ai/decision", {
@@ -93,6 +94,7 @@ export async function getAiDecision(
         curriculumId: filters.curriculumId ?? null,
         studentId: filters.studentId ?? null,
         professorId: filters.professorId ?? null,
+        language,
       },
       timeoutMs: AI_REQUEST_TIMEOUT_MS,
     });

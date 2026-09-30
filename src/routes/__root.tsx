@@ -15,6 +15,7 @@ import appCss from "../styles.css?url";
 import { RoleProvider } from "@/components/role-context";
 import { AnalyticsFilterProvider } from "@/components/dashboard/analytics-filter-context";
 import { AppShell } from "@/components/app-shell";
+import { LocaleProvider } from "@/lib/i18n";
 import {
   ensureActiveRole,
   legacyRedirectTo,
@@ -125,7 +126,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         },
         {
           rel: "stylesheet",
-          href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap",
+          href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap",
         },
         { rel: "icon", href: "/favicon.png", type: "image/png" },
       ],
@@ -158,18 +159,20 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RoleProvider>
-        <AnalyticsFilterProvider>
-          {isLogin ? (
-            <Outlet />
-          ) : (
-            <AppShell>
-              {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+      <LocaleProvider>
+        <RoleProvider>
+          <AnalyticsFilterProvider>
+            {isLogin ? (
               <Outlet />
-            </AppShell>
-          )}
-        </AnalyticsFilterProvider>
-      </RoleProvider>
+            ) : (
+              <AppShell>
+                {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+                <Outlet />
+              </AppShell>
+            )}
+          </AnalyticsFilterProvider>
+        </RoleProvider>
+      </LocaleProvider>
     </QueryClientProvider>
   );
 }

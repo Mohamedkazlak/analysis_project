@@ -8,3 +8,4 @@ PyJWT
 pytest
 httpx
 sqlglot
+python-multipart

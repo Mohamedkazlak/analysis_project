@@ -14,14 +14,18 @@ import {
 } from "@/components/dashboard/dashboard-ui";
 import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
+import { useLocale } from "@/lib/i18n";
 
 export function IntegrityPage() {
   const { role } = useParams({ from: "/$role" });
+  const { locale, messages } = useLocale();
+  const ip = messages.integrityPage;
+  const c = messages.common;
   const { filters, filtersReady, queryKey, enabled } =
     useFilteredQuery("integrity");
   const { data, isPending } = useQuery({
-    queryKey,
-    queryFn: () => getIntegrityReport(filters),
+    queryKey: [...queryKey, locale],
+    queryFn: () => getIntegrityReport(filters, locale),
     enabled,
   });
   if (!filtersReady) return <FiltersRequiredNotice />;
@@ -35,76 +39,73 @@ export function IntegrityPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBlock
-          label="Monitored attempts"
+          label={ip.monitored}
           value={`${data.totalAttempts}`}
-          sub="This reporting period"
+          sub={ip.thisPeriod}
         />
         <StatBlock
-          label="Flagged cases"
+          label={ip.flagged}
           value={`${data.flaggedCount}`}
-          sub="At least one anomaly"
+          sub={ip.anomalySub}
           tone="rose"
         />
         <StatBlock
-          label="Multiple attempts"
+          label={ip.multipleAttempts}
           value={`${multi}`}
-          sub="2 or more submissions"
+          sub={ip.multiSub}
           tone="iris"
         />
       </div>
 
       <AiDecisionSection />
 
-      <Panel title="Resolution workflow">
+      <Panel title={ip.workflow}>
         <div className="flex flex-wrap items-center gap-3 text-[13px]">
           <span className="rounded-full bg-rose/12 px-3 py-1.5 font-semibold text-rosee">
-            1 · Flagged queue
+            {ip.step1}
           </span>
           <span className="text-ink-soft">→</span>
           <span className="rounded-full bg-amber/12 px-3 py-1.5 font-semibold text-amberink">
-            2 · Incident review
+            {ip.step2}
           </span>
           <span className="text-ink-soft">→</span>
           <span className="rounded-full bg-mint/12 px-3 py-1.5 font-semibold text-mintink">
-            3 · Resolve / escalate
+            {ip.step3}
           </span>
           <Link
             to="/$role/real-time"
             params={{ role }}
             search={{}}
-            className="ml-auto text-[12px] font-semibold text-iris underline underline-offset-2"
+            className="ms-auto text-[12px] font-semibold text-iris underline underline-offset-2"
           >
-            Open live monitoring →
+            {ip.openLive}
           </Link>
         </div>
       </Panel>
 
-      <Panel title="Summary">
+      <Panel title={ip.summary}>
         <p className="text-[13px] leading-relaxed text-ink-soft">
-          <span className="font-semibold text-ink">
-            {data.flaggedCount} of {data.totalAttempts}
-          </span>{" "}
-          monitored attempts were flagged this period — {multi} for repeat
-          submissions, the remainder for unusual pacing, late starts or shared
-          network addresses. Flagged rows below are highlighted for manual
-          review.
+          {ip.summaryBody
+            .replace("{flagged}", String(data.flaggedCount))
+            .replace("{total}", String(data.totalAttempts))
+            .replace("{multi}", String(multi))}
         </p>
       </Panel>
 
       <AiInsight>{data.insight}</AiInsight>
 
-      <Panel title="Exam Attempt Log">
+      <Panel title={ip.attemptLog}>
         <TableShell>
           <thead className="bg-iris/8">
             <tr>
-              <Th>Student</Th>
-              <Th>Assessment</Th>
-              <Th>Start</Th>
-              <Th>End</Th>
-              <Th>IP address</Th>
-              <Th>Device</Th>
-              <Th align="right">Attempts</Th>
-              <Th align="right">Flags</Th>
+              <Th>{c.student}</Th>
+              <Th>{c.assessment}</Th>
+              <Th>{c.start}</Th>
+              <Th>{c.end}</Th>
+              <Th>{c.ip}</Th>
+              <Th>{c.device}</Th>
+              <Th align="right">{c.attempts}</Th>
+              <Th align="right">{c.flags}</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -119,22 +120,18 @@ export function IntegrityPage() {
                 <td className="px-4 py-3 text-ink-soft">{row.exam}</td>
                 <td className="px-4 py-3 text-ink-soft">{row.startedAt}</td>
                 <td className="px-4 py-3 text-ink-soft">{row.endedAt}</td>
-                <td className="px-4 py-3 text-ink-soft">{row.ip}</td>
+                <td className="px-4 py-3 font-mono text-[12px] text-ink-soft">
+                  {row.ip}
+                </td>
                 <td className="px-4 py-3 text-ink-soft">{row.device}</td>
-                <td className="px-4 py-3 text-right font-semibold text-ink">
+                <td className="px-4 py-3 text-end tabular-nums">
                   {row.attempts}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-end">
                   {row.flags.length ? (
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                      {row.flags.map((flag) => (
-                        <Badge key={flag} tone="fail">
-                          ⚠ {flag}
-                        </Badge>
-                      ))}
-                    </div>
+                    <Badge tone="fail">{row.flags.length}</Badge>
                   ) : (
-                    <Badge tone="pass">Clear</Badge>
+                    <span className="text-ink-soft">—</span>
                   )}
                 </td>
               </tr>

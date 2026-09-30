@@ -23,6 +23,7 @@ class StudentDashboardReport(BaseModel):
     sector: str = ""
     termName: str = ""
     average: float
+    overallAverage: Optional[float] = None
     gpa: Optional[float] = None
     classAverage: float
     bestTopic: str

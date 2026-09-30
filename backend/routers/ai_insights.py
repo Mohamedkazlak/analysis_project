@@ -7,6 +7,7 @@ from schemas.auth import UserContext
 from schemas.ai_insights import Insight, Prediction, RecommendationSet, AiDecision
 from schemas.filters import AnalyticsFilters, AiDecisionRequest
 from core.dependencies import get_live_user, get_validated_filters
+from core.locale import normalize_language
 from db.pool import get_db_conn
 from repositories.accounts import validate_analytics_filters
 import services.ai_insights as ai_service
@@ -21,7 +22,8 @@ async def post_ai_decision(
     db: asyncpg.Connection = Depends(get_db_conn),
 ):
     filters = await validate_analytics_filters(ctx, db, body.to_filters())
-    return await ai_service.get_ai_decision(ctx, db, filters)
+    language = normalize_language(body.language)
+    return await ai_service.get_ai_decision(ctx, db, filters, language=language)
 
 
 @router.get("/api/insights", response_model=Optional[Insight])

@@ -20,6 +20,7 @@ from routers import (
     ai_insights,
     filter_options,
     rag,
+    speech,
 )
 
 
@@ -57,3 +58,4 @@ app.include_router(student.router)
 app.include_router(ai_insights.router)
 app.include_router(filter_options.router)
 app.include_router(rag.router)
+app.include_router(speech.router)

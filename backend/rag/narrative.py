@@ -13,6 +13,7 @@ import logging
 from typing import Any
 
 from core.config import settings
+from core.locale import Language, normalize_language
 from rag.errors import LlmNotConfigured, LlmUpstreamError
 from rag.llm_client import chat_completion
 from services.ai_validation import evidence_corpus, narration_is_valid
@@ -23,14 +24,28 @@ logger = logging.getLogger(__name__)
 # every one of them slower, so narration queues through this many slots.
 _NARRATION_SLOT = asyncio.Semaphore(max(1, settings.AI_NARRATIVE_MAX_CONCURRENCY))
 
-_REWRITE_SYSTEM = (
+_REWRITE_SYSTEM_EN = (
     "You narrate a university dashboard that was already calculated from the database. "
-    "Rewrite each sentence in concise professional academic language. "
+    "Rewrite each sentence in concise professional academic English. "
     "Use only numbers and names that already appear in that sentence or the evidence list. "
     "Do not calculate a new metric. Do not add a warning, a recommendation, a person, "
     "or a cause. Do not change whether a sentence is current standing or a forecast. "
     'Return JSON only: {"sentences":[{"id":"...","text":"..."}]} with the same ids.'
 )
+
+_REWRITE_SYSTEM_AR = (
+    "You narrate a university dashboard that was already calculated from the database. "
+    "Rewrite each sentence in concise professional academic Arabic (Modern Standard Arabic). "
+    "Keep every number and proper name exactly as written; do not translate numbers into words. "
+    "Use only numbers and names that already appear in that sentence or the evidence list. "
+    "Do not calculate a new metric. Do not add a warning, a recommendation, a person, "
+    "or a cause. Do not change whether a sentence is current standing or a forecast. "
+    'Return JSON only: {"sentences":[{"id":"...","text":"..."}]} with the same ids.'
+)
+
+
+def _rewrite_system(language: Language) -> str:
+    return _REWRITE_SYSTEM_AR if language == "ar" else _REWRITE_SYSTEM_EN
 
 
 def narration_enabled() -> bool:
@@ -85,6 +100,13 @@ def _parse_rewrites(raw: str) -> dict[str, str]:
         if isinstance(sentence_id, (str, int)) and isinstance(text, str):
             rewrites[str(sentence_id)] = text
     return rewrites
+
+
+def _decision_language(result: dict[str, Any]) -> Language:
+    metadata = (
+        result.get("metadata") if isinstance(result.get("metadata"), dict) else {}
+    )
+    return normalize_language(str(metadata.get("language") or "en"))
 
 
 def _rewrite_targets(result: dict[str, Any]) -> list[tuple[tuple, str]]:
@@ -152,6 +174,7 @@ async def apply_llm_narratives(result: dict[str, Any]) -> dict[str, Any]:
     targets = _rewrite_targets(result)
     if not narration_enabled() or not targets:
         return result
+    language = _decision_language(result)
     corpus = evidence_corpus(result)
     prediction = (
         result.get("prediction") if isinstance(result.get("prediction"), dict) else None
@@ -159,16 +182,16 @@ async def apply_llm_narratives(result: dict[str, Any]) -> dict[str, Any]:
     sentences = [
         {"id": str(index), "text": text} for index, (_, text) in enumerate(targets)
     ]
-    user = f"Evidence:\n{corpus.strip()}\n\nSentences:\n{json.dumps(sentences)}"
+    user = f"Evidence:\n{corpus.strip()}\n\nSentences:\n{json.dumps(sentences, ensure_ascii=False)}"
     try:
         async with _NARRATION_SLOT:
             raw = await chat_completion(
                 [
-                    {"role": "system", "content": _REWRITE_SYSTEM},
+                    {"role": "system", "content": _rewrite_system(language)},
                     {"role": "user", "content": user},
                 ],
                 temperature=0.2,
-                max_tokens=700,
+                max_tokens=900,
                 timeout=_narrative_timeout(),
             )
     except (LlmNotConfigured, LlmUpstreamError):

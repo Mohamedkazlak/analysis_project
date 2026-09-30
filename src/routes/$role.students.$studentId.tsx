@@ -11,7 +11,6 @@ import {
   PolarGrid,
   Radar,
   RadarChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -33,6 +32,11 @@ import {
 import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { roleGuard } from "@/lib/auth/role-guards";
+import { useLocale, translateStanding } from "@/lib/i18n";
+import {
+  MirroredChart,
+  tooltipMirrorStyle,
+} from "@/components/dashboard/chart-rtl";
 
 export const Route = createFileRoute("/$role/students/$studentId")({
   beforeLoad: roleGuard("/students"),
@@ -73,6 +77,11 @@ function StudentProfile() {
   const { role: roleParam } = Route.useParams();
   const { studentId } = Route.useParams();
   const { role } = useRole();
+  const { locale, messages } = useLocale();
+  const rtl = locale === "ar";
+  const c = messages.common;
+  const sp = messages.studentProfilePage;
+  const o = messages.overview;
   const allowed =
     role === "senior_management" ||
     role === "program_director" ||
@@ -88,7 +97,7 @@ function StudentProfile() {
 
   if (!allowed) {
     return (
-      <Panel title="Restricted">
+      <Panel title={c.restricted}>
         <p className="text-[13px] text-ink-soft">
           Individual student records are available to Senior Management, Program
           Directors, Academic Affairs and Professors.
@@ -135,26 +144,26 @@ function StudentProfile() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatBlock
-          label="All-years average"
+          label={sp.allYearsAverage}
           value={`${data.overallAverage}`}
-          sub={`Cohort ${data.classAverage}`}
+          sub={`${sp.cohortAvg} ${data.classAverage}`}
           tone="iris"
         />
         <StatBlock
-          label="Current GPA"
+          label={sp.currentGpa}
           value={`${data.gpa}`}
-          sub="Cumulative GPA from transcript rules"
+          sub={sp.gpaSub}
           tone="mint"
         />
         <StatBlock
-          label="Attendance"
+          label={o.attendance}
           value={`${data.attendance}%`}
-          sub="Latest academic year"
+          sub={sp.attendanceSub}
         />
         <StatBlock
-          label="Credits earned"
+          label={sp.creditsEarned}
           value={`${data.totalCredits}`}
-          sub={`${data.years.length} academic years`}
+          sub={`${data.years.length} ${c.academicYear}`}
           tone="iris"
         />
       </div>
@@ -175,90 +184,92 @@ function StudentProfile() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Panel title="Average by Academic Year" className="lg:col-span-2">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={data.yearTrend}
-                margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                <XAxis
-                  dataKey="year"
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[30, 100]}
-                />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
-                />
-                <Line
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="student"
-                  name={data.name}
-                  stroke={chartColors.iris}
-                  strokeWidth={2.5}
-                  dot={{ r: 3 }}
-                />
-                <Line
-                  isAnimationActive={false}
-                  type="monotone"
-                  dataKey="cohort"
-                  name="Cohort average"
-                  stroke={chartColors.cyan}
-                  strokeWidth={2}
-                  strokeDasharray="5 4"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+        <Panel title={sp.avgByYear} className="lg:col-span-2">
+          <MirroredChart rtl={rtl} height={256}>
+            <LineChart
+              data={data.yearTrend}
+              margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+            >
+              <CartesianGrid stroke={chartColors.grid} vertical={false} />
+              <XAxis
+                dataKey="year"
+                tick={{ fontSize: 11, fill: chartColors.axis }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: chartColors.axis }}
+                axisLine={false}
+                tickLine={false}
+                domain={[30, 100]}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
+              />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="student"
+                name={data.name}
+                stroke={chartColors.iris}
+                strokeWidth={2.5}
+                dot={{ r: 3 }}
+              />
+              <Line
+                isAnimationActive={false}
+                type="monotone"
+                dataKey="cohort"
+                name={sp.cohortAvg}
+                stroke={chartColors.cyan}
+                strokeWidth={2}
+                strokeDasharray="5 4"
+                dot={false}
+              />
+            </LineChart>
+          </MirroredChart>
         </Panel>
 
-        <Panel title="Topic Strengths">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={data.topics} outerRadius="72%">
-                <PolarGrid stroke={chartColors.grid} />
-                <PolarAngleAxis
-                  dataKey="topic"
-                  tick={{ fontSize: 10, fill: chartColors.axis }}
-                />
-                <Radar
-                  isAnimationActive={false}
-                  dataKey="score"
-                  stroke={chartColors.violet}
-                  fill={chartColors.violet}
-                  fillOpacity={0.28}
-                />
-                <Tooltip contentStyle={tooltipStyle} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
+        <Panel title={sp.topicStrengths}>
+          <MirroredChart rtl={rtl} height={256}>
+            <RadarChart data={data.topics} outerRadius="72%">
+              <PolarGrid stroke={chartColors.grid} />
+              <PolarAngleAxis
+                dataKey="topic"
+                tick={{ fontSize: 10, fill: chartColors.axis }}
+              />
+              <Radar
+                isAnimationActive={false}
+                dataKey="score"
+                stroke={chartColors.violet}
+                fill={chartColors.violet}
+                fillOpacity={0.28}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+              />
+            </RadarChart>
+          </MirroredChart>
         </Panel>
       </div>
 
-      <Panel title="Year by Year Record">
+      <Panel title={sp.yearRecord}>
         <TableShell>
           <thead>
             <tr className="border-b border-black/5">
-              <Th>Academic year</Th>
-              <Th>Level</Th>
-              <Th align="right">Average</Th>
-              <Th align="right">GPA</Th>
-              <Th align="right">Exams</Th>
-              <Th align="right">Pass rate</Th>
-              <Th align="right">Attendance</Th>
-              <Th align="right">Credits</Th>
-              <Th>Standing</Th>
+              <Th>{c.academicYear}</Th>
+              <Th>{c.level}</Th>
+              <Th align="right">{c.average}</Th>
+              <Th align="right">{c.gpa}</Th>
+              <Th align="right">{c.exams}</Th>
+              <Th align="right">{o.passRate}</Th>
+              <Th align="right">{o.attendance}</Th>
+              <Th align="right">{c.credits}</Th>
+              <Th>{c.standing}</Th>
             </tr>
           </thead>
           <tbody>
@@ -278,7 +289,9 @@ function StudentProfile() {
                 <td className="px-4 py-2.5 text-right">{y.attendance}%</td>
                 <td className="px-4 py-2.5 text-right">{y.credits}</td>
                 <td className="px-4 py-2.5">
-                  <Badge tone={standingTone(y.standing)}>{y.standing}</Badge>
+                  <Badge tone={standingTone(y.standing)}>
+                    {translateStanding(y.standing, messages.standing)}
+                  </Badge>
                 </td>
               </tr>
             ))}
@@ -287,67 +300,68 @@ function StudentProfile() {
       </Panel>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Panel title="Course Averages per Year">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={data.courseMatrix.map((row) => {
-                  const entry: Record<string, string | number> = {
-                    course: row.course,
-                  };
-                  data.years.forEach((y, i) => {
-                    entry[y.year] = row.values[i] ?? 0;
-                  });
-                  return entry;
-                })}
-                margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                <XAxis
-                  dataKey="course"
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
+        <Panel title={sp.courseAverages}>
+          <MirroredChart rtl={rtl} height={256}>
+            <BarChart
+              data={data.courseMatrix.map((row) => {
+                const entry: Record<string, string | number> = {
+                  course: row.course,
+                };
+                data.years.forEach((y, i) => {
+                  entry[y.year] = row.values[i] ?? 0;
+                });
+                return entry;
+              })}
+              margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+            >
+              <CartesianGrid stroke={chartColors.grid} vertical={false} />
+              <XAxis
+                dataKey="course"
+                tick={{ fontSize: 11, fill: chartColors.axis }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: chartColors.axis }}
+                axisLine={false}
+                tickLine={false}
+                domain={[0, 100]}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+              />
+              <Legend
+                wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
+              />
+              {data.years.map((y, i) => (
+                <Bar
+                  key={y.year}
+                  isAnimationActive={false}
+                  dataKey={y.year}
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={26}
+                  fill={
+                    [chartColors.iris, chartColors.violet, chartColors.cyan][
+                      i % 3
+                    ]
+                  }
                 />
-                <YAxis
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={[0, 100]}
-                />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
-                />
-                {data.years.map((y, i) => (
-                  <Bar
-                    key={y.year}
-                    isAnimationActive={false}
-                    dataKey={y.year}
-                    radius={[8, 8, 0, 0]}
-                    maxBarSize={26}
-                    fill={
-                      [chartColors.iris, chartColors.violet, chartColors.cyan][
-                        i % 3
-                      ]
-                    }
-                  />
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+              ))}
+            </BarChart>
+          </MirroredChart>
         </Panel>
 
-        <Panel title="Exam History (current year)">
+        <Panel title={sp.examHistory}>
           <TableShell>
             <thead>
               <tr className="border-b border-black/5">
-                <Th>Exam</Th>
-                <Th>Course</Th>
-                <Th>Date</Th>
-                <Th align="right">Score</Th>
-                <Th align="right">Minutes</Th>
-                <Th>Result</Th>
+                <Th>{c.exam}</Th>
+                <Th>{c.course}</Th>
+                <Th>{c.date}</Th>
+                <Th align="right">{c.score}</Th>
+                <Th align="right">{c.minutes}</Th>
+                <Th>{c.result}</Th>
               </tr>
             </thead>
             <tbody>
@@ -375,7 +389,7 @@ function StudentProfile() {
                             : "neutral"
                       }
                     >
-                      {a.status}
+                      {translateStanding(a.status, messages.standing)}
                     </Badge>
                   </td>
                 </tr>

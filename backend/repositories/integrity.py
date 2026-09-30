@@ -1,5 +1,6 @@
 import asyncpg
 
+from core.locale import Language, txt
 from repositories.sql_filters import attempt_where
 from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
@@ -74,6 +75,7 @@ async def get_integrity_report(
     ctx: UserContext,
     db: asyncpg.Connection,
     filters: AnalyticsFilters | None = None,
+    language: Language = "en",
 ):
     filters = filters or AnalyticsFilters()
     where_sql, args, _ = attempt_where(filters)
@@ -144,9 +146,17 @@ async def get_integrity_report(
 
     flagged_count = sum(1 for r in report_rows if r["flags"])
     insight = (
-        f"{flagged_count} of {len(report_rows)} monitored attempts show at least one anomaly this period."
+        txt(
+            language,
+            f"{flagged_count} of {len(report_rows)} monitored attempts show at least one anomaly this period.",
+            f"{flagged_count} من أصل {len(report_rows)} محاولة مراقبة تُظهر شذوذًا واحدًا على الأقل في هذه الفترة.",
+        )
         if report_rows
-        else "No monitored attempts in this scope yet."
+        else txt(
+            language,
+            "No monitored attempts in this scope yet.",
+            "لا محاولات مراقبة في هذا النطاق بعد.",
+        )
     )
     return {
         "rows": report_rows,

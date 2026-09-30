@@ -58,6 +58,16 @@ describe("semester pass-rate note", () => {
     expect(semesterPassRateNote("both", "Spring 2026", "Fall 2025")).toContain(
       "Spring 2026",
     );
+    expect(
+      semesterPassRateNote("both", "ربيع 2026", "خريف 2025", {
+        thisSemester: "هذا الفصل",
+        lastSemester: "الفصل السابق",
+        both: "معدل نجاح الجلوس المُقيَّم في {current} مقارنة بـ {previous}.",
+        currentOnly: "x",
+        previousOnly: "y",
+        none: "z",
+      }),
+    ).toContain("ربيع 2026");
   });
 
   it("says when the college sat exams in only one semester", () => {

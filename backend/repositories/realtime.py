@@ -2,6 +2,7 @@ import datetime
 
 import asyncpg
 
+from core.locale import Language, txt
 from core.utils import PASS_MARK, round1
 from repositories.sql_filters import attempt_where
 from schemas.auth import UserContext
@@ -12,6 +13,7 @@ async def get_real_time_struggling(
     ctx: UserContext,
     db: asyncpg.Connection,
     filters: AnalyticsFilters | None = None,
+    language: Language = "en",
 ):
     filters = filters or AnalyticsFilters()
     where_sql, args, _ = attempt_where(filters)
@@ -88,9 +90,17 @@ async def get_real_time_struggling(
     ]
     active_now = sum(e["activeNow"] for e in live_exams)
     insight = (
-        f"Live monitoring covers {len(live_exams)} sittings right now."
+        txt(
+            language,
+            f"Live monitoring covers {len(live_exams)} sittings right now.",
+            f"المراقبة الحية تغطي {len(live_exams)} جلسة الآن.",
+        )
         if live_exams
-        else "No exams currently in progress in this scope."
+        else txt(
+            language,
+            "No exams currently in progress in this scope.",
+            "لا امتحانات جارية حاليًا في هذا النطاق.",
+        )
     )
     return {
         "students": students_ranked,

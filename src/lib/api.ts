@@ -88,9 +88,14 @@ export async function fetchFromBackend<T>(
   }
 }
 
-export function getManagementOverview(filters: AnalyticsFilters = {}) {
+export function getManagementOverview(
+  filters: AnalyticsFilters = {},
+  language: "en" | "ar" = "en",
+) {
+  const base = toSearchParams(filters);
+  const sep = base.includes("?") ? "&" : "?";
   return fetchFromBackend<ManagementOverview>(
-    `/api/management-overview${toSearchParams(filters)}`,
+    `/api/management-overview${base}${sep}language=${language}`,
   );
 }
 
@@ -100,21 +105,36 @@ export function getStudentPerformance(filters: AnalyticsFilters = {}) {
   );
 }
 
-export function getItemAnalysis(filters: AnalyticsFilters = {}) {
+export function getItemAnalysis(
+  filters: AnalyticsFilters = {},
+  language: "en" | "ar" = "en",
+) {
+  const base = toSearchParams(filters);
+  const sep = base.includes("?") ? "&" : "?";
   return fetchFromBackend<ItemAnalysisReport>(
-    `/api/item-analysis${toSearchParams(filters)}`,
+    `/api/item-analysis${base}${sep}language=${language}`,
   );
 }
 
-export function getIntegrityReport(filters: AnalyticsFilters = {}) {
+export function getIntegrityReport(
+  filters: AnalyticsFilters = {},
+  language: "en" | "ar" = "en",
+) {
+  const base = toSearchParams(filters);
+  const sep = base.includes("?") ? "&" : "?";
   return fetchFromBackend<IntegrityReport>(
-    `/api/integrity-report${toSearchParams(filters)}`,
+    `/api/integrity-report${base}${sep}language=${language}`,
   );
 }
 
-export function getParticipationReport(filters: AnalyticsFilters = {}) {
+export function getParticipationReport(
+  filters: AnalyticsFilters = {},
+  language: "en" | "ar" = "en",
+) {
+  const base = toSearchParams(filters);
+  const sep = base.includes("?") ? "&" : "?";
   return fetchFromBackend<ParticipationReport>(
-    `/api/participation-report${toSearchParams(filters)}`,
+    `/api/participation-report${base}${sep}language=${language}`,
   );
 }
 
@@ -124,9 +144,14 @@ export function getCoursePerformance(filters: AnalyticsFilters = {}) {
   );
 }
 
-export function getRealTimeStruggling(filters: AnalyticsFilters = {}) {
+export function getRealTimeStruggling(
+  filters: AnalyticsFilters = {},
+  language: "en" | "ar" = "en",
+) {
+  const base = toSearchParams(filters);
+  const sep = base.includes("?") ? "&" : "?";
   return fetchFromBackend<RealTimeReport>(
-    `/api/real-time-struggling${toSearchParams(filters)}`,
+    `/api/real-time-struggling${base}${sep}language=${language}`,
   );
 }
 

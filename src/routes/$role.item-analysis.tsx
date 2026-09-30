@@ -7,7 +7,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -32,6 +31,12 @@ import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters"
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { roleGuard } from "@/lib/auth/role-guards";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
+import { useLocale } from "@/lib/i18n";
+import {
+  AxisValueTick,
+  MirroredChart,
+  tooltipMirrorStyle,
+} from "@/components/dashboard/chart-rtl";
 
 export const Route = createFileRoute("/$role/item-analysis")({
   beforeLoad: roleGuard("/item-analysis"),
@@ -55,11 +60,15 @@ export const Route = createFileRoute("/$role/item-analysis")({
 });
 
 function ItemAnalysis() {
+  const { locale, messages } = useLocale();
+  const rtl = locale === "ar";
+  const c = messages.common;
+  const ia = messages.itemAnalysisPage;
   const { filters, filtersReady, queryKey, enabled } =
     useFilteredQuery("item-analysis");
   const { data, isPending } = useQuery({
-    queryKey,
-    queryFn: () => getItemAnalysis(filters),
+    queryKey: [...queryKey, locale],
+    queryFn: () => getItemAnalysis(filters, locale),
     enabled,
   });
   const [examFilter, setExamFilter] = useState<string>("all");
@@ -71,7 +80,7 @@ function ItemAnalysis() {
 
   const examOptions = Array.from(new Set(data.questions.map((q) => q.exam)));
   const topicOptions = [
-    { value: "all", label: "All topics" },
+    { value: "all", label: c.allTopics },
     ...Array.from(new Set(data.questions.map((q) => q.topic))).map((t) => ({
       value: t,
       label: t,
@@ -83,8 +92,9 @@ function ItemAnalysis() {
       (topicFilter === "all" || q.topic === topicFilter) &&
       (!flaggedOnly || q.flagged),
   );
+  const qPrefix = c.questionShort;
   const chartRows = rows.slice(0, 12).map((q) => ({
-    label: `Q${q.number}`,
+    label: `${qPrefix}${q.number}`,
     correct: q.pctCorrect,
     flagged: q.flagged,
   }));
@@ -103,20 +113,20 @@ function ItemAnalysis() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBlock
-          label="Items analysed"
+          label={ia.itemsAnalysed}
           value={`${rows.length}`}
-          sub={examFilter === "all" ? "All assessments" : examFilter}
+          sub={examFilter === "all" ? c.allAssessments : examFilter}
         />
         <StatBlock
-          label="Average % correct"
+          label={ia.avgCorrect}
           value={avgCorrect === "—" ? "—" : `${avgCorrect}%`}
-          sub="Across selected items"
+          sub={ia.acrossSelected}
           tone="iris"
         />
         <StatBlock
-          label="Mean discrimination"
+          label={ia.meanDiscrimination}
           value={avgDiscrim}
-          sub="0.30+ is healthy"
+          sub={ia.discrimHealthy}
           tone="mint"
         />
       </div>
@@ -124,80 +134,98 @@ function ItemAnalysis() {
       <AiDecisionSection />
 
       <Panel
-        title="% Correct per Question"
+        title={ia.correctPerQuestion}
         action={
           <FilterBar>
             <Select
-              label="Assessment"
+              label={c.assessment}
               value={examFilter}
               options={[
-                { value: "all", label: "All assessments" },
+                { value: "all", label: c.allAssessments },
                 ...examOptions.map((e) => ({ value: e, label: e })),
               ]}
               onChange={setExamFilter}
             />
             <Select
-              label="Topic"
+              label={c.topic}
               value={topicFilter}
               options={topicOptions}
               onChange={setTopicFilter}
             />
             <Toggle
-              label="Flagged only"
+              label={c.flaggedOnly}
               checked={flaggedOnly}
               onChange={setFlaggedOnly}
             />
           </FilterBar>
         }
       >
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={chartRows}
-              margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+        <MirroredChart rtl={rtl} height={256}>
+          <BarChart
+            data={chartRows}
+            margin={{ top: 8, right: 8, bottom: 0, left: -18 }}
+          >
+            <CartesianGrid stroke={chartColors.grid} vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={(props) => (
+                <AxisValueTick
+                  x={props.x}
+                  y={props.y}
+                  payload={props.payload}
+                  mirror={rtl}
+                />
+              )}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              tick={(props) => (
+                <AxisValueTick
+                  x={props.x}
+                  y={props.y}
+                  payload={props.payload}
+                  mirror={rtl}
+                  dy={4}
+                  suffix="%"
+                />
+              )}
+              axisLine={false}
+              tickLine={false}
+              domain={[0, 100]}
+            />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              wrapperStyle={tooltipMirrorStyle(rtl)}
+              formatter={(v: number) => `${v}%`}
+            />
+            <Bar
+              isAnimationActive={false}
+              dataKey="correct"
+              name={ia.pctCorrect}
+              radius={[8, 8, 0, 0]}
+              maxBarSize={38}
             >
-              <CartesianGrid stroke={chartColors.grid} vertical={false} />
-              <XAxis
-                dataKey="label"
-                tick={{ fontSize: 11, fill: chartColors.axis }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: chartColors.axis }}
-                axisLine={false}
-                tickLine={false}
-                domain={[0, 100]}
-                unit="%"
-              />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                formatter={(v: number) => `${v}%`}
-              />
-              <Bar
-                isAnimationActive={false}
-                dataKey="correct"
-                name="% correct"
-                radius={[8, 8, 0, 0]}
-                maxBarSize={38}
-              >
-                {chartRows.map((row) => (
-                  <Cell
-                    key={row.label}
-                    fill={row.flagged ? chartColors.rose : chartColors.iris}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+              {chartRows.map((row) => (
+                <Cell
+                  key={row.label}
+                  fill={row.flagged ? chartColors.rose : chartColors.iris}
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </MirroredChart>
       </Panel>
 
       <AiInsight>{data.insight}</AiInsight>
 
       <Panel
-        title="Questions Needing Review"
-        action={<Badge tone="warn">{data.needsReview.length} flagged</Badge>}
+        title={ia.needingReview}
+        action={
+          <Badge tone="warn">
+            {ia.flaggedCount.replace("{n}", String(data.needsReview.length))}
+          </Badge>
+        }
       >
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {data.needsReview.map((q) => (
@@ -207,30 +235,33 @@ function ItemAnalysis() {
             >
               <div className="flex items-center justify-between">
                 <div className="font-display text-[13px] font-bold text-ink">
-                  Q{q.number} · {q.exam}
+                  {qPrefix}
+                  {q.number} · {q.exam}
                 </div>
                 <Badge tone="warn">D {q.discriminationIndex}</Badge>
               </div>
               <p className="mt-1.5 text-[12px] text-ink-soft">{q.prompt}</p>
               <div className="mt-2 text-[11px] font-semibold text-amberink">
-                {q.pctCorrect}% correct · topic: {q.topic}
+                {ia.correctTopic
+                  .replace("{pct}", String(q.pctCorrect))
+                  .replace("{topic}", q.topic)}
               </div>
             </div>
           ))}
         </div>
       </Panel>
 
-      <Panel title="Full Item Table">
+      <Panel title={ia.fullTable}>
         <TableShell>
           <thead className="bg-iris/8">
             <tr>
-              <Th>Question</Th>
-              <Th>Assessment</Th>
-              <Th>Topic</Th>
-              <Th>% correct</Th>
-              <Th align="right">% incorrect</Th>
-              <Th>Difficulty</Th>
-              <Th>Discrimination</Th>
+              <Th>{c.question}</Th>
+              <Th>{c.assessment}</Th>
+              <Th>{c.topic}</Th>
+              <Th>{ia.pctCorrect}</Th>
+              <Th align="right">{ia.pctIncorrect}</Th>
+              <Th>{c.difficulty}</Th>
+              <Th>{c.discrimination}</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-black/5">
@@ -240,7 +271,8 @@ function ItemAnalysis() {
                 className={q.flagged ? "bg-rose/5" : "bg-white/40"}
               >
                 <td className="px-4 py-3 font-semibold text-ink">
-                  Q{q.number}
+                  {qPrefix}
+                  {q.number}
                 </td>
                 <td className="px-4 py-3 text-ink-soft">{q.exam}</td>
                 <td className="px-4 py-3 text-ink-soft">{q.topic}</td>

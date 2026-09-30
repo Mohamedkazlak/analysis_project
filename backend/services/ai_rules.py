@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from core.locale import Language, entity as localize_entity, txt
 from core.utils import PASS_MARK
 
 # Review line for a pass rate. Distinct from the student pass mark.
@@ -54,10 +55,15 @@ def _lowest(rows: list[dict], limit: int = 5) -> list[dict]:
     return sorted(rows, key=lambda row: float(row["value"]))[:limit]
 
 
-def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> list[dict]:
+def build_warnings(
+    role: str,
+    evidence: list[dict],
+    data: dict[str, Any],
+    language: Language = "en",
+) -> list[dict]:
     """Warnings that follow from evidence already limited to this role."""
     if role == "student":
-        return _student_warnings(evidence, data)
+        return _student_warnings(evidence, data, language=language)
     warnings: list[dict] = []
 
     for row in _lowest(_metrics(evidence, "pass_rate")):
@@ -65,22 +71,31 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
         if value >= PASS_RATE_THRESHOLD:
             continue
         severity = "high" if value < PASS_MARK else "medium"
-        entity = row.get("entity")
+        raw_entity = row.get("entity")
+        label = localize_entity(language, raw_entity) if raw_entity else None
         warnings.append(
             _warning(
                 "pass_rate_below_threshold",
                 metric="pass_rate",
-                entity=entity,
+                entity=raw_entity,
                 value=value,
                 threshold=PASS_RATE_THRESHOLD,
                 severity=severity,
                 text=(
-                    f"{entity} pass rate is {value:g}%, below the "
-                    f"{PASS_RATE_THRESHOLD:g}% review threshold."
-                    if entity
-                    else (
+                    txt(
+                        language,
+                        f"{label} pass rate is {value:g}%, below the "
+                        f"{PASS_RATE_THRESHOLD:g}% review threshold.",
+                        f"معدل نجاح {label} هو {value:g}%، دون عتبة المراجعة "
+                        f"{PASS_RATE_THRESHOLD:g}%.",
+                    )
+                    if label
+                    else txt(
+                        language,
                         f"Pass rate is {value:g}%, below the "
-                        f"{PASS_RATE_THRESHOLD:g}% review threshold."
+                        f"{PASS_RATE_THRESHOLD:g}% review threshold.",
+                        f"معدل النجاح هو {value:g}%، دون عتبة المراجعة "
+                        f"{PASS_RATE_THRESHOLD:g}%.",
                     )
                 ),
             )
@@ -91,20 +106,29 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
         if value >= ATTENDANCE_WATCH:
             continue
         severity = "high" if value < ATTENDANCE_THRESHOLD else "medium"
-        entity = row.get("entity")
+        raw_entity = row.get("entity")
+        label = localize_entity(language, raw_entity) if raw_entity else None
         threshold = ATTENDANCE_THRESHOLD if severity == "high" else ATTENDANCE_WATCH
         warnings.append(
             _warning(
                 "attendance_below_threshold",
                 metric="attendance_rate",
-                entity=entity,
+                entity=raw_entity,
                 value=value,
                 threshold=threshold,
                 severity=severity,
                 text=(
-                    f"{entity} attendance is {value:g}%, below the {threshold:g}% threshold."
-                    if entity
-                    else f"Attendance is {value:g}%, below the {threshold:g}% threshold."
+                    txt(
+                        language,
+                        f"{label} attendance is {value:g}%, below the {threshold:g}% threshold.",
+                        f"حضور {label} هو {value:g}%، دون العتبة {threshold:g}%.",
+                    )
+                    if label
+                    else txt(
+                        language,
+                        f"Attendance is {value:g}%, below the {threshold:g}% threshold.",
+                        f"الحضور هو {value:g}%، دون العتبة {threshold:g}%.",
+                    )
                 ),
             )
         )
@@ -113,22 +137,31 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
         value = float(row["value"])
         if value >= DISCRIMINATION_THRESHOLD:
             continue
-        entity = row.get("entity")
+        raw_entity = row.get("entity")
+        label = localize_entity(language, raw_entity) if raw_entity else None
         warnings.append(
             _warning(
                 "discrimination_below_threshold",
                 metric="discrimination_index",
-                entity=entity,
+                entity=raw_entity,
                 value=value,
                 threshold=DISCRIMINATION_THRESHOLD,
                 severity="medium",
                 text=(
-                    f"{entity} has a discrimination index of {value}, below "
-                    f"{DISCRIMINATION_THRESHOLD}."
-                    if entity
-                    else (
+                    txt(
+                        language,
+                        f"{label} has a discrimination index of {value}, below "
+                        f"{DISCRIMINATION_THRESHOLD}.",
+                        f"{label} بمؤشر تمييز {value}، دون "
+                        f"{DISCRIMINATION_THRESHOLD}.",
+                    )
+                    if label
+                    else txt(
+                        language,
                         f"A question has a discrimination index of {value}, below "
-                        f"{DISCRIMINATION_THRESHOLD}."
+                        f"{DISCRIMINATION_THRESHOLD}.",
+                        f"سؤال بمؤشر تمييز {value}، دون "
+                        f"{DISCRIMINATION_THRESHOLD}.",
                     )
                 ),
             )
@@ -145,7 +178,11 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
                 value=value,
                 threshold=0,
                 severity="high",
-                text=(f"{int(value)} student(s) are below the {PASS_MARK}% pass mark."),
+                text=txt(
+                    language,
+                    f"{int(value)} student(s) are below the {PASS_MARK}% pass mark.",
+                    f"{int(value)} طالبًا دون درجة النجاح {PASS_MARK}%.",
+                ),
             )
         )
 
@@ -169,9 +206,17 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
                     threshold=0,
                     severity="high" if share > 0.2 else "medium",
                     text=(
-                        f"{int(value)} of {int(total)} monitored attempts are flagged."
+                        txt(
+                            language,
+                            f"{int(value)} of {int(total)} monitored attempts are flagged.",
+                            f"{int(value)} من {int(total)} محاولة مراقَبة معلّمة.",
+                        )
                         if total
-                        else f"{int(value)} monitored attempts are flagged."
+                        else txt(
+                            language,
+                            f"{int(value)} monitored attempts are flagged.",
+                            f"{int(value)} محاولة مراقَبة معلّمة.",
+                        )
                     ),
                 )
             )
@@ -189,9 +234,16 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
                     value=float(len(signals)),
                     threshold=1,
                     severity="high" if len(signals) >= 3 else "medium",
-                    text=(
-                        f"{row.get('student')} on {row.get('exam')} has "
-                        f"{len(signals)} integrity signal(s)."
+                    text=txt(
+                        language,
+                        (
+                            f"{row.get('student')} on {row.get('exam')} has "
+                            f"{len(signals)} integrity signal(s)."
+                        ),
+                        (
+                            f"{row.get('student')} في {row.get('exam')} لديه "
+                            f"{len(signals)} إشارة نزاهة."
+                        ),
                     ),
                 )
             )
@@ -210,9 +262,16 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
                     value=latest,
                     threshold=previous - DECLINE_THRESHOLD,
                     severity="high",
-                    text=(
-                        f"{timeline[-1].get('exam')} score fell by {round(drop, 1)} points, "
-                        f"from {previous} to {latest}."
+                    text=txt(
+                        language,
+                        (
+                            f"{timeline[-1].get('exam')} score fell by {round(drop, 1)} points, "
+                            f"from {previous} to {latest}."
+                        ),
+                        (
+                            f"درجة {timeline[-1].get('exam')} انخفضت بمقدار {round(drop, 1)} نقطة، "
+                            f"من {previous} إلى {latest}."
+                        ),
                     ),
                 )
             )
@@ -220,7 +279,9 @@ def build_warnings(role: str, evidence: list[dict], data: dict[str, Any]) -> lis
     return warnings
 
 
-def _student_warnings(evidence: list[dict], data: dict[str, Any]) -> list[dict]:
+def _student_warnings(
+    evidence: list[dict], data: dict[str, Any], language: Language = "en"
+) -> list[dict]:
     del evidence
     warnings: list[dict] = []
     dashboard = data.get("dashboard") or {}
@@ -235,7 +296,11 @@ def _student_warnings(evidence: list[dict], data: dict[str, Any]) -> list[dict]:
                 value=float(average),
                 threshold=float(PASS_MARK),
                 severity="high",
-                text=f"Your average is {average}, below the {PASS_MARK}% pass mark.",
+                text=txt(
+                    language,
+                    f"Your average is {average}, below the {PASS_MARK}% pass mark.",
+                    f"متوسطك هو {average}، دون درجة النجاح {PASS_MARK}%.",
+                ),
             )
         )
     if len(timeline) >= 2:
@@ -251,9 +316,16 @@ def _student_warnings(evidence: list[dict], data: dict[str, Any]) -> list[dict]:
                     value=latest,
                     threshold=previous - DECLINE_THRESHOLD,
                     severity="high",
-                    text=(
-                        f"{timeline[-1].get('exam')} score fell by {round(drop, 1)} points, "
-                        f"from {previous} to {latest}."
+                    text=txt(
+                        language,
+                        (
+                            f"{timeline[-1].get('exam')} score fell by {round(drop, 1)} points, "
+                            f"from {previous} to {latest}."
+                        ),
+                        (
+                            f"درجة {timeline[-1].get('exam')} انخفضت بمقدار {round(drop, 1)} نقطة، "
+                            f"من {previous} إلى {latest}."
+                        ),
                     ),
                 )
             )

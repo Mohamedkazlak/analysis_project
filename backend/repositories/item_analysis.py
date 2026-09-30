@@ -1,5 +1,6 @@
 import asyncpg
 
+from core.locale import Language, txt
 from repositories.sql_filters import course_org_where
 from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
@@ -9,6 +10,7 @@ async def get_item_analysis(
     ctx: UserContext,
     db: asyncpg.Connection,
     filters: AnalyticsFilters | None = None,
+    language: Language = "en",
 ):
     filters = filters or AnalyticsFilters()
     where_sql, args, next_i = course_org_where(filters)
@@ -83,10 +85,19 @@ async def get_item_analysis(
     needs_review = questions[:6]
     insight = (
         (
-            f"Question {needs_review[0]['number']} on {needs_review[0]['exam']} has a discrimination index of "
-            f"{needs_review[0]['discriminationIndex']}."
+            txt(
+                language,
+                f"Question {needs_review[0]['number']} on {needs_review[0]['exam']} has a discrimination index of "
+                f"{needs_review[0]['discriminationIndex']}.",
+                f"السؤال {needs_review[0]['number']} في {needs_review[0]['exam']} مؤشر تمييزه "
+                f"{needs_review[0]['discriminationIndex']}.",
+            )
         )
         if needs_review
-        else "No items in this scope yet."
+        else txt(
+            language,
+            "No items in this scope yet.",
+            "لا بنود في هذا النطاق بعد.",
+        )
     )
     return {"questions": questions, "needsReview": needs_review, "insight": insight}

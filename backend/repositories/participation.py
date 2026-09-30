@@ -2,6 +2,7 @@ from typing import Literal
 
 import asyncpg
 
+from core.locale import Language, entity, txt
 from core.utils import avg, round1
 from repositories.sql_filters import attempt_where
 from schemas.auth import UserContext
@@ -21,6 +22,7 @@ async def get_participation_report(
     ctx: UserContext,
     db: asyncpg.Connection,
     filters: AnalyticsFilters | None = None,
+    language: Language = "en",
 ):
     filters = filters or AnalyticsFilters()
     where_sql, args, _ = attempt_where(filters)
@@ -93,7 +95,11 @@ async def get_participation_report(
             "attendanceByCurriculum": [],
             "avgTimePerExam": [],
             "absentees": [],
-            "insight": "No attendance rows in this scope yet.",
+            "insight": txt(
+                language,
+                "No attendance rows in this scope yet.",
+                "لا صفوف حضور في هذا النطاق بعد.",
+            ),
         }
 
     attempts_per_exam = [
@@ -207,14 +213,27 @@ async def get_participation_report(
         if attendance_by_curriculum
         else None
     )
-    entity = {"college": "college", "curriculum": "curriculum", "exam": "curriculum"}[
-        grain
-    ]
+    entity_key = {
+        "college": "college",
+        "curriculum": "curriculum",
+        "exam": "curriculum",
+    }[grain]
+    entity_en = f"{entity_key}s"
+    entity_ar = {"college": "الكليات", "curriculum": "المقررات"}[entity_key]
     insight = (
-        f"{weakest['course']} has the weakest attendance among "
-        f"{entity}s in this view at {weakest['attendance']}%."
+        txt(
+            language,
+            f"{entity(language, weakest['course'])} has the weakest attendance among "
+            f"{entity_en} in this view at {weakest['attendance']}%.",
+            f"{entity(language, weakest['course'])} لديها أضعف حضور بين "
+            f"{entity_ar} في هذا العرض بنسبة {weakest['attendance']}%.",
+        )
         if weakest
-        else "No attendance rows in this scope yet."
+        else txt(
+            language,
+            "No attendance rows in this scope yet.",
+            "لا صفوف حضور في هذا النطاق بعد.",
+        )
     )
 
     return {

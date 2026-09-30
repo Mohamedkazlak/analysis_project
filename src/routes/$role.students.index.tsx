@@ -20,6 +20,7 @@ import {
 import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
+import { useLocale, translateOrgName, translateStanding } from "@/lib/i18n";
 import { roleGuard } from "@/lib/auth/role-guards";
 
 export const Route = createFileRoute("/$role/students/")({
@@ -53,6 +54,9 @@ export const Route = createFileRoute("/$role/students/")({
 function StudentDirectory() {
   const { role: roleParam } = Route.useParams();
   const { role } = useRole();
+  const { locale, messages } = useLocale();
+  const c = messages.common;
+  const sp = messages.studentsPage;
   const allowed =
     role === "senior_management" ||
     role === "program_director" ||
@@ -70,7 +74,7 @@ function StudentDirectory() {
 
   if (!allowed) {
     return (
-      <Panel title="Restricted">
+      <Panel title={c.restricted}>
         <p className="text-[13px] text-ink-soft">
           Individual student records are available to Senior Management, Program
           Directors, Academic Affairs and Professors.
@@ -116,47 +120,50 @@ function StudentDirectory() {
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatBlock
-          label="Students on record"
+          label={sp.onRecord}
           value={`${data.length}`}
-          sub="Full multi-year history"
+          sub={sp.fullHistory}
           tone="iris"
         />
         <StatBlock
-          label="Improving"
+          label={c.improving}
           value={`${improving}`}
-          sub="Higher than their first year"
+          sub={sp.higherThanFirst}
           tone="mint"
         />
         <StatBlock
-          label="Needs attention"
+          label={c.needsAttention}
           value={`${atRisk}`}
-          sub="Watch list or at risk"
+          sub={sp.watchOrRisk}
           tone="rose"
         />
         <StatBlock
-          label="Cohort average"
+          label={c.cohortAverage}
           value={`${(data.reduce((a, b) => a + b.overallAverage, 0) / data.length).toFixed(1)}`}
-          sub="Across all academic years"
+          sub={sp.acrossYears}
         />
       </div>
 
       <Panel
-        title="Student Profiles"
+        title={sp.profilesTitle}
         action={
           <FilterBar>
             <Select
-              label="Standing"
+              label={c.standing}
               value={standing}
               onChange={setStanding}
               options={[
-                { value: "all", label: "All" },
-                ...standings.map((s) => ({ value: s, label: s })),
+                { value: "all", label: c.all },
+                ...standings.map((s) => ({
+                  value: s,
+                  label: translateStanding(s, messages.standing),
+                })),
               ]}
             />
             <SearchInput
               value={query}
               onChange={setQuery}
-              placeholder="Search students…"
+              placeholder={c.searchStudents}
             />
           </FilterBar>
         }
@@ -164,14 +171,14 @@ function StudentDirectory() {
         <TableShell>
           <thead>
             <tr className="border-b border-black/5">
-              <Th>Student</Th>
-              <Th>Program</Th>
-              <Th>Section</Th>
-              <Th align="right">All-years avg</Th>
-              <Th align="right">Current year</Th>
-              <Th align="right">Trend</Th>
-              <Th>Standing</Th>
-              <Th align="right">Profile</Th>
+              <Th>{c.student}</Th>
+              <Th>{c.program}</Th>
+              <Th>{c.section}</Th>
+              <Th align="right">{c.allYearsAvg}</Th>
+              <Th align="right">{c.currentYear}</Th>
+              <Th align="right">{c.trend}</Th>
+              <Th>{c.standing}</Th>
+              <Th align="right">{c.profile}</Th>
             </tr>
           </thead>
           <tbody>
@@ -181,7 +188,9 @@ function StudentDirectory() {
                 className="border-b border-black/5 last:border-0 hover:bg-white/60"
               >
                 <td className="px-4 py-2.5 font-semibold">{r.name}</td>
-                <td className="px-4 py-2.5 text-ink-soft">{r.program}</td>
+                <td className="px-4 py-2.5 text-ink-soft">
+                  {translateOrgName(r.program, locale)}
+                </td>
                 <td className="px-4 py-2.5 text-ink-soft">{r.section}</td>
                 <td className="px-4 py-2.5">
                   <div className="flex items-center justify-end gap-2">
@@ -212,7 +221,7 @@ function StudentDirectory() {
                           : "fail"
                     }
                   >
-                    {r.standing}
+                    {translateStanding(r.standing, messages.standing)}
                   </Badge>
                 </td>
                 <td className="px-4 py-2.5 text-right">
@@ -222,7 +231,7 @@ function StudentDirectory() {
                     search={{}}
                     className="text-[12px] font-semibold text-iris hover:underline"
                   >
-                    View →
+                    {c.viewProfile}
                   </Link>
                 </td>
               </tr>

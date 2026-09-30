@@ -1,5 +1,6 @@
 import asyncpg
 
+from core.locale import Language, entity, txt
 from core.utils import PASS_MARK
 from repositories.sql_filters import attempt_where, student_where
 from schemas.auth import UserContext
@@ -10,6 +11,7 @@ async def get_management_overview(
     ctx: UserContext,
     db: asyncpg.Connection,
     filters: AnalyticsFilters | None = None,
+    language: Language = "en",
 ) -> dict:
     filters = filters or AnalyticsFilters()
     where_sql, args, _ = attempt_where(filters)
@@ -129,10 +131,22 @@ async def get_management_overview(
     }
 
     kpis = [
-        {"label": "Exams administered", "value": str(totals["exams"])},
-        {"label": "Students", "value": str(students)},
-        {"label": "Student pass rate", "value": f"{pass_rate_value:.1f}%"},
-        {"label": "Attendance", "value": f"{attendance_value:.1f}%"},
+        {
+            "label": txt(language, "Exams administered", "الامتحانات المُدارة"),
+            "value": str(totals["exams"]),
+        },
+        {
+            "label": txt(language, "Students", "الطلاب"),
+            "value": str(students),
+        },
+        {
+            "label": txt(language, "Student pass rate", "معدل نجاح الطلاب"),
+            "value": f"{pass_rate_value:.1f}%",
+        },
+        {
+            "label": txt(language, "Attendance", "الحضور"),
+            "value": f"{attendance_value:.1f}%",
+        },
     ]
 
     pass_rate_by_course = [
@@ -300,35 +314,74 @@ async def get_management_overview(
 
     totals["colleges"] = len(pass_rate_by_college)
     if not pass_rate_by_college:
-        insight = "No exam attempts in this scope yet."
+        insight = txt(
+            language,
+            "No exam attempts in this scope yet.",
+            "لا توجد محاولات امتحان في هذا النطاق بعد.",
+        )
     elif (
         not filters.sector_id
         and not filters.college_id
         and len(pass_rate_by_college) > 1
     ):
-        insight = (
-            f"University student pass rate is {pass_rate_value:.1f}% across "
-            f"{len(pass_rate_by_college)} colleges and {students} enrolled students. "
-            f"Attendance is {attendance_value:.1f}%."
+        insight = txt(
+            language,
+            (
+                f"University student pass rate is {pass_rate_value:.1f}% across "
+                f"{len(pass_rate_by_college)} colleges and {students} enrolled students. "
+                f"Attendance is {attendance_value:.1f}%."
+            ),
+            (
+                f"معدل نجاح طلاب الجامعة هو {pass_rate_value:.1f}% عبر "
+                f"{len(pass_rate_by_college)} كليات و{students} طالبًا مسجّلًا. "
+                f"الحضور {attendance_value:.1f}%."
+            ),
         )
     elif len(pass_rate_by_college) == 1:
         only = pass_rate_by_college[0]
-        insight = (
-            f"{only['college']} student pass rate is {only['passRate']}% across "
-            f"{only['students'] or only['participants']} enrolled students in this view."
+        college = entity(language, only["college"])
+        enrolled = only["students"] or only["participants"]
+        insight = txt(
+            language,
+            (
+                f"{college} student pass rate is {only['passRate']}% across "
+                f"{enrolled} enrolled students in this view."
+            ),
+            (
+                f"معدل نجاح طلاب {college} هو {only['passRate']}% عبر "
+                f"{enrolled} طالبًا مسجّلًا في هذا العرض."
+            ),
         )
     else:
         weakest = min(pass_rate_by_college, key=lambda r: r["passRate"])
         strongest = max(pass_rate_by_college, key=lambda r: r["passRate"])
-        place = (
-            "this sector"
-            if filters.sector_id and not filters.college_id
-            else "this view"
+        place = txt(
+            language,
+            (
+                "this sector"
+                if filters.sector_id and not filters.college_id
+                else "this view"
+            ),
+            (
+                "هذا القطاع"
+                if filters.sector_id and not filters.college_id
+                else "هذا العرض"
+            ),
         )
-        insight = (
-            f"{weakest['college']} has the lowest student pass rate in {place} "
-            f"at {weakest['passRate']}%, while {strongest['college']} leads at "
-            f"{strongest['passRate']}%."
+        weak_name = entity(language, weakest["college"])
+        strong_name = entity(language, strongest["college"])
+        insight = txt(
+            language,
+            (
+                f"{weak_name} has the lowest student pass rate in {place} "
+                f"at {weakest['passRate']}%, while {strong_name} leads at "
+                f"{strongest['passRate']}%."
+            ),
+            (
+                f"{weak_name} لديها أدنى معدل نجاح طلابي في {place} "
+                f"بنسبة {weakest['passRate']}%، بينما تتصدر {strong_name} بنسبة "
+                f"{strongest['passRate']}%."
+            ),
         )
 
     contains_synthetic = bool(

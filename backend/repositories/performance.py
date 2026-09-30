@@ -9,7 +9,10 @@ EMPTY = {
     "averageByExam": [],
     "highest": {"name": "—", "score": 0, "exam": "—"},
     "lowest": {"name": "—", "score": 0, "exam": "—"},
-    "passFail": [],
+    "passFail": [
+        {"name": "Passed", "value": 0},
+        {"name": "Failed", "value": 0},
+    ],
     "distribution": [],
     "ranked": [],
     "semesterComparison": [],

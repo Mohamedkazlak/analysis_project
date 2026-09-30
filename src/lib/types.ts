@@ -379,6 +379,7 @@ export interface StudentDashboardReport {
   topics: { topic: string; score: number }[];
   topicsFrom: "questions" | "courses";
   average: number;
+  overallAverage: number | null;
   gpa: number | null;
   classAverage: number;
   bestTopic: string;

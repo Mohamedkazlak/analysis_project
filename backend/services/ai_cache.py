@@ -27,6 +27,7 @@ def make_cache_key(
     academic_year_id: str = "",
     term_id: str = "",
     data_version: str = "v1",
+    language: str = "en",
 ) -> str:
     return "|".join(
         [
@@ -40,9 +41,10 @@ def make_cache_key(
             filters.curriculum_id or "",
             filters.student_id or "",
             filters.professor_id or "",
-                str(academic_year_id or ""),
-                str(term_id or ""),
-                data_version,
+            str(academic_year_id or ""),
+            str(term_id or ""),
+            data_version,
+            language or "en",
         ]
     )
 

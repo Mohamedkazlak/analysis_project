@@ -53,6 +53,10 @@ describe("exam-activity chart filters", () => {
       { value: "2026-02", label: "Feb 2026" },
       { value: "2026-03", label: "Mar 2026" },
     ]);
+    expect(activityMonthOptions(rows, "term-2025-spring", "ar")).toEqual([
+      { value: "2026-02", label: "فبراير 2026" },
+      { value: "2026-03", label: "مارس 2026" },
+    ]);
   });
 
   it("filters the series by semester and month", () => {
@@ -62,6 +66,11 @@ describe("exam-activity chart filters", () => {
     expect(filterActivityTrend(rows, "all", "2025-10")).toEqual([
       { label: "Oct 2025", exams: 3, participants: 40 },
     ]);
+    expect(
+      filterActivityTrend(rows, "term-2025-spring", "all", "ar").map(
+        (r) => r.label,
+      ),
+    ).toEqual(["فبراير 2026", "مارس 2026"]);
   });
 });
 
@@ -151,6 +160,15 @@ describe("exam summaries", () => {
       value: "6 more",
       sub: "Mar 2026 had 10 · Feb 2026 had 4",
     });
+    expect(
+      monthExamChange(
+        filterActivityTrend(rows, "term-2025-spring", "all", "ar"),
+        "ar",
+      ),
+    ).toMatchObject({
+      value: "أكثر بـ 6",
+      sub: "مارس 2026: 10 · فبراير 2026: 4",
+    });
   });
 
   it("summarises exam activity for the AI insight card", () => {
@@ -165,5 +183,14 @@ describe("exam summaries", () => {
       "Computer Science administered the most exams",
     );
     expect(insight.body).toContain("CS101 Final");
+
+    const arInsight = examActivityInsight(
+      filterExamSummaries(exams, "term-2025-spring", "all"),
+      filterActivityTrend(rows, "term-2025-spring", "all", "ar"),
+      "ar",
+    );
+    expect(arInsight.headline).toContain("مارس 2026");
+    expect(arInsight.body).toContain("فبراير 2026");
+    expect(arInsight.body).toContain("علوم الحاسب");
   });
 });

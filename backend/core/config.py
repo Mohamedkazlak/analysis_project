@@ -58,7 +58,7 @@ class Settings(BaseModel):
     LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", "")
     LLM_API_KEY: str = os.getenv("LLM_API_KEY", "")
     LLM_MODEL: str = os.getenv("LLM_MODEL", "")
-    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
     # Narration runs after the decision is already cached and served.
     AI_NARRATIVE_TIMEOUT_SECONDS: float = float(
         os.getenv("AI_NARRATIVE_TIMEOUT_SECONDS", "20")
@@ -69,6 +69,26 @@ class Settings(BaseModel):
     AI_NARRATIVE_MAX_CONCURRENCY: int = int(
         os.getenv("AI_NARRATIVE_MAX_CONCURRENCY", "1")
     )
+
+    # Speech To Text - Groq Whisper
+    STT_BASE_URL: str = os.getenv(
+        "STT_BASE_URL",
+        "https://api.groq.com/openai/v1",
+    )
+    STT_API_KEY: str = os.getenv("STT_API_KEY", "")
+    STT_MODEL: str = os.getenv("STT_MODEL", "whisper-large-v3-turbo")
+    STT_LANGUAGE: str = os.getenv("STT_LANGUAGE", "")
+
+    # Text To Speech - ElevenLabs
+    TTS_BASE_URL: str = os.getenv(
+        "TTS_BASE_URL",
+        "https://api.elevenlabs.io/v1",
+    )
+    TTS_API_KEY: str = os.getenv("TTS_API_KEY", "")
+    TTS_MODEL: str = os.getenv("TTS_MODEL", "eleven_multilingual_v2")
+    TTS_VOICE_ID: str = os.getenv("TTS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+    TTS_OUTPUT_FORMAT: str = os.getenv("TTS_OUTPUT_FORMAT", "mp3_44100_128")
+    TTS_TIMEOUT_SECONDS: float = float(os.getenv("TTS_TIMEOUT_SECONDS", "120"))
 
     @property
     def cors_origins(self) -> list[str]:

@@ -17,8 +17,9 @@
   --color-rosee: #be123c;
   --color-ai: #7c3aed;
   --color-canvas: #f4f1fc;
-  --font-display: "Plus Jakarta Sans", ui-sans-serif, sans-serif;
-  --font-sans: "Inter", ui-sans-serif, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Noto Sans Arabic", ui-sans-serif,
+    sans-serif;
+  --font-sans: "Inter", "Noto Sans Arabic", ui-sans-serif, sans-serif;
 }
 
 @layer base {

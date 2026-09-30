@@ -111,6 +111,28 @@ export function coursesScopeReady(
   return Boolean(filters.collegeId && filters.professorId);
 }
 
+export type CoursesCopy = {
+  allUniversity: string;
+  selectedScope: string;
+  allCollege: string;
+  selectedCurriculum: string;
+  selectedProfessor: string;
+  collegeProfessorScope: string;
+  selectProfessor: string;
+  selectCollegeProfessor: string;
+};
+
+const DEFAULT_COURSES_COPY: CoursesCopy = {
+  allUniversity: "All curriculum in the university",
+  selectedScope: "In the selected scope",
+  allCollege: "All curriculum in this college",
+  selectedCurriculum: "In the selected curriculum",
+  selectedProfessor: "In the selected professor scope",
+  collegeProfessorScope: "In this college and professor scope",
+  selectProfessor: "Select a professor to view curriculum.",
+  selectCollegeProfessor: "Select a college and professor to view curriculum.",
+};
+
 export function coursesCurriculumSubtitle(
   role: string,
   filters: Pick<
@@ -118,26 +140,31 @@ export function coursesCurriculumSubtitle(
     "sectorId" | "collegeId" | "professorId" | "curriculumId"
   >,
   scopeLevel?: string | null,
+  copy: CoursesCopy = DEFAULT_COURSES_COPY,
 ): string {
   if (role === "senior_management" && scopeLevel !== "sector") {
     const narrowed = Boolean(
       filters.sectorId || filters.collegeId || filters.professorId,
     );
-    return narrowed
-      ? "In the selected scope"
-      : "All curriculum in the university";
+    return narrowed ? copy.selectedScope : copy.allUniversity;
   }
   if (role === "program_director") {
-    if (filters.curriculumId) return "In the selected curriculum";
-    if (filters.professorId) return "In the selected professor scope";
-    return "All curriculum in this college";
+    if (filters.curriculumId) return copy.selectedCurriculum;
+    if (filters.professorId) return copy.selectedProfessor;
+    return copy.allCollege;
   }
-  return "In this college and professor scope";
+  return copy.collegeProfessorScope;
 }
 
-export function coursesScopeMessage(role: string): string {
+export function coursesScopeMessage(
+  role: string,
+  copy: Pick<
+    CoursesCopy,
+    "selectProfessor" | "selectCollegeProfessor"
+  > = DEFAULT_COURSES_COPY,
+): string {
   if (role === "academic_affairs") {
-    return "Select a professor to view curriculum.";
+    return copy.selectProfessor;
   }
-  return "Select a college and professor to view curriculum.";
+  return copy.selectCollegeProfessor;
 }

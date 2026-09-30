@@ -25,6 +25,7 @@ from typing import Any, Optional
 import asyncpg
 
 from core.config import settings
+from core.locale import Language, entity, normalize_language, txt
 from core.utils import PASS_MARK
 from repositories.sql_filters import attempt_where
 from schemas.auth import UserContext
@@ -72,7 +73,9 @@ def _structured_recommendation(
     }
 
 
-def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
+def _insight_from_context(
+    role: str, data: dict[str, Any], language: Language = "en"
+) -> Optional[dict]:
     if role == "student":
         return None
 
@@ -82,8 +85,16 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         courses = overview.get("passRateByCourse") or []
         if not colleges:
             return {
-                "headline": "No exam data in this scope yet",
-                "body": "There are no recorded attempts in this scope yet, so there is nothing to report on.",
+                "headline": txt(
+                    language,
+                    "No exam data in this scope yet",
+                    "لا توجد بيانات امتحانات في هذا النطاق بعد",
+                ),
+                "body": txt(
+                    language,
+                    "There are no recorded attempts in this scope yet, so there is nothing to report on.",
+                    "لا توجد محاولات مسجّلة في هذا النطاق بعد، لذلك لا يوجد ما يمكن الإبلاغ عنه.",
+                ),
                 "action": None,
             }
         weakest = min(colleges, key=lambda c: c["passRate"])
@@ -95,48 +106,110 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
             and totals.get("students") is not None
             and totals.get("attendance") is not None
         ):
-            headline = f"University student pass rate is {totals['passRate']}%"
-            body = f"Across {len(colleges)} colleges, {int(totals['students'])} students sat exams"
+            headline = txt(
+                language,
+                f"University student pass rate is {totals['passRate']}%",
+                f"معدل نجاح طلاب الجامعة هو {totals['passRate']}%",
+            )
+            body = txt(
+                language,
+                f"Across {len(colleges)} colleges, {int(totals['students'])} students sat exams",
+                f"عبر {len(colleges)} كليات، أدى {int(totals['students'])} طالبًا الامتحانات",
+            )
             if totals.get("exams") is not None:
-                body += f" and {int(totals['exams'])} exams were administered"
-            body += (
-                f". The university student pass rate is {totals['passRate']}% "
-                f"and attendance is {totals['attendance']}%."
+                body += txt(
+                    language,
+                    f" and {int(totals['exams'])} exams were administered",
+                    f" وأُجري {int(totals['exams'])} امتحانًا",
+                )
+            body += txt(
+                language,
+                (
+                    f". The university student pass rate is {totals['passRate']}% "
+                    f"and attendance is {totals['attendance']}%."
+                ),
+                (
+                    f". معدل نجاح طلاب الجامعة هو {totals['passRate']}% "
+                    f"والحضور {totals['attendance']}%."
+                ),
             )
             if len(colleges) > 1:
-                body += (
-                    f" {weakest['college']} is the lowest college at "
-                    f"{weakest['passRate']}%."
+                weak = entity(language, weakest["college"])
+                body += txt(
+                    language,
+                    (f" {weak} is the lowest college at " f"{weakest['passRate']}%."),
+                    (f" {weak} هي أدنى كلية بمعدل " f"{weakest['passRate']}%."),
                 )
             return {
                 "headline": headline,
                 "body": body,
-                "action": {"label": "Drill into curriculum", "to": "/courses"},
+                "action": {
+                    "label": txt(
+                        language, "Drill into curriculum", "التفصيل حسب المقرر"
+                    ),
+                    "to": "/courses",
+                },
             }
         if len(colleges) == 1:
-            headline = f"{weakest['college']} pass rate is {weakest['passRate']}%"
-            body = (
-                f"{weakest['college']} spans {weakest['courses']} curriculum with "
-                f"{weakest['participants']} students who sat exams this term, at a "
-                f"{weakest['passRate']}% student pass rate."
+            weak = entity(language, weakest["college"])
+            headline = txt(
+                language,
+                f"{weak} pass rate is {weakest['passRate']}%",
+                f"معدل نجاح {weak} هو {weakest['passRate']}%",
+            )
+            body = txt(
+                language,
+                (
+                    f"{weak} spans {weakest['courses']} curriculum with "
+                    f"{weakest['participants']} students who sat exams this term, at a "
+                    f"{weakest['passRate']}% student pass rate."
+                ),
+                (
+                    f"{weak} يشمل {weakest['courses']} مقررًا مع "
+                    f"{weakest['participants']} طالبًا أدوا الامتحانات هذا الفصل، "
+                    f"بمعدل نجاح طلابي {weakest['passRate']}%."
+                ),
             )
         else:
-            place = comparison_place(role, data)
-            headline = f"{weakest['college']} has the lowest pass rate in {place}"
-            body = (
-                f"Across the {len(colleges)} colleges in {place}, {weakest['college']} sits at "
-                f"{weakest['passRate']}% student pass — the lowest here, from "
-                f"{weakest['participants']} students."
+            place = comparison_place(role, data, language)
+            weak = entity(language, weakest["college"])
+            headline = txt(
+                language,
+                f"{weak} has the lowest pass rate in {place}",
+                f"{weak} لديها أدنى معدل نجاح في {place}",
+            )
+            body = txt(
+                language,
+                (
+                    f"Across the {len(colleges)} colleges in {place}, {weak} sits at "
+                    f"{weakest['passRate']}% student pass — the lowest here, from "
+                    f"{weakest['participants']} students."
+                ),
+                (
+                    f"عبر {len(colleges)} كليات في {place}، تبلغ {weak} "
+                    f"{weakest['passRate']}% نجاحًا طلابيًا — الأدنى هنا، من "
+                    f"{weakest['participants']} طالبًا."
+                ),
             )
         if weakest_course:
-            body += (
-                f" The weakest curriculum overall is {weakest_course['course']} at "
-                f"{weakest_course['passRate']}% pass."
+            body += txt(
+                language,
+                (
+                    f" The weakest curriculum overall is {weakest_course['course']} at "
+                    f"{weakest_course['passRate']}% pass."
+                ),
+                (
+                    f" أضعف مقرر إجمالًا هو {weakest_course['course']} بمعدل نجاح "
+                    f"{weakest_course['passRate']}%."
+                ),
             )
         return {
             "headline": headline,
             "body": body,
-            "action": {"label": "Drill into curriculum", "to": "/courses"},
+            "action": {
+                "label": txt(language, "Drill into curriculum", "التفصيل حسب المقرر"),
+                "to": "/courses",
+            },
         }
 
     if role == "academic_affairs":
@@ -151,30 +224,57 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         ]
         if not weakest_att and not below_pass:
             return {
-                "headline": "No performance data in this scope yet",
-                "body": "There are no recorded attempts in this college yet.",
+                "headline": txt(
+                    language,
+                    "No performance data in this scope yet",
+                    "لا توجد بيانات أداء في هذا النطاق بعد",
+                ),
+                "body": txt(
+                    language,
+                    "There are no recorded attempts in this college yet.",
+                    "لا توجد محاولات مسجّلة في هذه الكلية بعد.",
+                ),
                 "action": None,
             }
-        parts = []
+        parts_en = []
+        parts_ar = []
         if below_pass:
-            parts.append(
+            parts_en.append(
                 f"{len(below_pass)} student(s) are currently below the {PASS_MARK}% pass mark"
             )
+            parts_ar.append(
+                f"{len(below_pass)} طالبًا دون درجة النجاح {PASS_MARK}% حاليًا"
+            )
         if weakest_att:
-            parts.append(
+            parts_en.append(
                 f"{weakest_att['course']} has the weakest attendance in the college at "
                 f"{weakest_att['attendance']}%"
             )
-        body = ". ".join(p[0].upper() + p[1:] for p in parts) + "."
-        headline = (
-            f"{len(below_pass)} students below the pass mark this term"
-            if below_pass
-            else f"{weakest_att['course']} attendance needs attention"
-        )
+            parts_ar.append(
+                f"{weakest_att['course']} لديها أضعف حضور في الكلية بنسبة "
+                f"{weakest_att['attendance']}%"
+            )
+        if language == "ar":
+            body = ". ".join(parts_ar) + "."
+            headline = (
+                f"{len(below_pass)} طلاب دون درجة النجاح هذا الفصل"
+                if below_pass
+                else f"حضور {weakest_att['course']} يحتاج انتباهًا"
+            )
+        else:
+            body = ". ".join(p[0].upper() + p[1:] for p in parts_en) + "."
+            headline = (
+                f"{len(below_pass)} students below the pass mark this term"
+                if below_pass
+                else f"{weakest_att['course']} attendance needs attention"
+            )
         return {
             "headline": headline,
             "body": body,
-            "action": {"label": "Open student performance", "to": "/performance"},
+            "action": {
+                "label": txt(language, "Open student performance", "فتح أداء الطلاب"),
+                "to": "/performance",
+            },
         }
 
     if role == "professor":
@@ -182,36 +282,78 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         items = data.get("items") or {}
         if not sections:
             return {
-                "headline": "No exam data in this scope yet",
-                "body": "There are no recorded attempts in your assigned curriculum yet.",
+                "headline": txt(
+                    language,
+                    "No exam data in this scope yet",
+                    "لا توجد بيانات امتحانات في هذا النطاق بعد",
+                ),
+                "body": txt(
+                    language,
+                    "There are no recorded attempts in your assigned curriculum yet.",
+                    "لا توجد محاولات مسجّلة في مقرراتك المعيّنة بعد.",
+                ),
                 "action": None,
             }
         weakest_section = min(sections, key=lambda s: s["average"])
         strongest_section = max(sections, key=lambda s: s["average"])
         gap = round(strongest_section["average"] - weakest_section["average"], 1)
         if gap > 0 and weakest_section["section"] != strongest_section["section"]:
-            body = (
-                f"{weakest_section['section']} averages {weakest_section['average']}, "
-                f"{gap} points behind {strongest_section['section']} at "
-                f"{strongest_section['average']} on the same curriculum."
+            body = txt(
+                language,
+                (
+                    f"{weakest_section['section']} averages {weakest_section['average']}, "
+                    f"{gap} points behind {strongest_section['section']} at "
+                    f"{strongest_section['average']} on the same curriculum."
+                ),
+                (
+                    f"متوسط {weakest_section['section']} هو {weakest_section['average']}، "
+                    f"أقل بـ {gap} نقطة عن {strongest_section['section']} عند "
+                    f"{strongest_section['average']} في المقرر ذاته."
+                ),
             )
-            headline = f"{weakest_section['section']} trails {strongest_section['section']} by {gap} points"
+            headline = txt(
+                language,
+                f"{weakest_section['section']} trails {strongest_section['section']} by {gap} points",
+                f"{weakest_section['section']} تتأخر عن {strongest_section['section']} بـ {gap} نقطة",
+            )
         else:
-            body = f"{weakest_section['section']} averages {weakest_section['average']} across your curriculum."
-            headline = f"{weakest_section['section']} is your current baseline section"
+            body = txt(
+                language,
+                f"{weakest_section['section']} averages {weakest_section['average']} across your curriculum.",
+                f"متوسط {weakest_section['section']} هو {weakest_section['average']} عبر مقرراتك.",
+            )
+            headline = txt(
+                language,
+                f"{weakest_section['section']} is your current baseline section",
+                f"{weakest_section['section']} هي شعبك المرجعية الحالية",
+            )
         needs_review = items.get("needsReview") or []
         if needs_review:
             top = needs_review[0]
-            body += (
-                f" {top['exam']} question {top['number']} has a discrimination index of "
-                f"{top['discriminationIndex']}, the weakest in your curriculum."
+            body += txt(
+                language,
+                (
+                    f" {top['exam']} question {top['number']} has a discrimination index of "
+                    f"{top['discriminationIndex']}, the weakest in your curriculum."
+                ),
+                (
+                    f" السؤال {top['number']} في {top['exam']} بمؤشر تمييز "
+                    f"{top['discriminationIndex']}، وهو الأضعف في مقرراتك."
+                ),
             )
         else:
-            body += " No graded item-level answers are recorded yet, so item analysis has nothing to flag."
+            body += txt(
+                language,
+                " No graded item-level answers are recorded yet, so item analysis has nothing to flag.",
+                " لا توجد إجابات على مستوى البنود بعد، لذلك لا يوجد ما يشير إليه تحليل البنود.",
+            )
         return {
             "headline": headline,
             "body": body,
-            "action": {"label": "Compare sections", "to": "/performance"},
+            "action": {
+                "label": txt(language, "Compare sections", "مقارنة الشعب"),
+                "to": "/performance",
+            },
         }
 
     if role == "it_academic_integrity":
@@ -219,8 +361,16 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         cases_raw = data.get("flagged") or []
         if not cases_raw:
             return {
-                "headline": "No flagged attempts right now",
-                "body": "No monitored attempts in this scope currently show anomalies.",
+                "headline": txt(
+                    language,
+                    "No flagged attempts right now",
+                    "لا توجد محاولات معلّمة الآن",
+                ),
+                "body": txt(
+                    language,
+                    "No monitored attempts in this scope currently show anomalies.",
+                    "لا تُظهر المحاولات المراقَبة في هذا النطاق شذوذات حاليًا.",
+                ),
                 "action": None,
             }
         cases = []
@@ -243,12 +393,26 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
         top = cases_raw[0]
         top_flags = ", ".join(e["label"] for e in top["evidence"]).lower()
         return {
-            "headline": f"{report.get('flaggedCount', 0)} of {report.get('totalAttempts', 0)} monitored attempts flagged",
-            "body": (
-                f"{report.get('flaggedCount', 0)} attempts in this scope show at least one anomaly. "
-                f"The highest-signal case is {top['student']} on {top['exam']}, flagged for {top_flags}."
+            "headline": txt(
+                language,
+                f"{report.get('flaggedCount', 0)} of {report.get('totalAttempts', 0)} monitored attempts flagged",
+                f"{report.get('flaggedCount', 0)} من {report.get('totalAttempts', 0)} محاولة مراقَبة معلّمة",
             ),
-            "action": {"label": "Open case detail", "to": "/integrity"},
+            "body": txt(
+                language,
+                (
+                    f"{report.get('flaggedCount', 0)} attempts in this scope show at least one anomaly. "
+                    f"The highest-signal case is {top['student']} on {top['exam']}, flagged for {top_flags}."
+                ),
+                (
+                    f"{report.get('flaggedCount', 0)} محاولات في هذا النطاق تُظهر شذوذًا واحدًا على الأقل. "
+                    f"أعلى حالة إشارة هي {top['student']} في {top['exam']}، معلّمة بسبب {top_flags}."
+                ),
+            ),
+            "action": {
+                "label": txt(language, "Open case detail", "فتح تفاصيل الحالة"),
+                "to": "/integrity",
+            },
             "cases": cases,
         }
 
@@ -256,7 +420,10 @@ def _insight_from_context(role: str, data: dict[str, Any]) -> Optional[dict]:
 
 
 def _recommendations_from_context(
-    role: str, data: dict[str, Any], insight_id: str
+    role: str,
+    data: dict[str, Any],
+    insight_id: str,
+    language: Language = "en",
 ) -> Optional[dict]:
     items: list[dict] = []
 
@@ -266,6 +433,43 @@ def _recommendations_from_context(
         if timeline:
             worst = min(timeline, key=lambda r: r["score"])
             delta = round(dashboard["average"] - dashboard["classAverage"], 1)
+            term = (dashboard.get("termName") or "").strip()
+            overall = dashboard.get("overallAverage")
+            semester_label = (
+                txt(language, f"{term} average", f"متوسط {term}")
+                if term
+                else txt(language, "This semester average", "متوسط هذا الفصل")
+            )
+            evidence_rows = [
+                {
+                    "label": semester_label,
+                    "detail": f"{dashboard['average']}",
+                },
+                {
+                    "label": txt(language, "Class average", "متوسط الصف"),
+                    "detail": f"{dashboard['classAverage']}",
+                },
+            ]
+            if overall is not None:
+                evidence_rows.append(
+                    {
+                        "label": txt(language, "All-years average", "متوسط كل السنوات"),
+                        "detail": f"{overall}",
+                    }
+                )
+            semester_phrase = (
+                txt(
+                    language,
+                    f"This semester ({term}) your average is {dashboard['average']}",
+                    f"هذا الفصل ({term}) متوسطك هو {dashboard['average']}",
+                )
+                if term
+                else txt(
+                    language,
+                    f"This semester your average is {dashboard['average']}",
+                    f"هذا الفصل متوسطك هو {dashboard['average']}",
+                )
+            )
             items.append(
                 _structured_recommendation(
                     "s1",
@@ -274,18 +478,26 @@ def _recommendations_from_context(
                     dashboard["average"],
                     dashboard["classAverage"],
                     (
-                        f"Your average is {dashboard['average']}, "
-                        f"{'above' if delta >= 0 else 'below'} the class average of "
-                        f"{dashboard['classAverage']} by {abs(delta)} points"
+                        f"{semester_phrase}, "
+                        + txt(
+                            language,
+                            f"{'above' if delta >= 0 else 'below'} the class average of "
+                            f"{dashboard['classAverage']} by {abs(delta)} points",
+                            f"{'أعلى' if delta >= 0 else 'أدنى'} من متوسط الصف "
+                            f"{dashboard['classAverage']} بمقدار {abs(delta)} نقطة",
+                        )
+                        + (
+                            txt(
+                                language,
+                                f". All-years average is {overall}",
+                                f". متوسط كل السنوات هو {overall}",
+                            )
+                            if overall is not None
+                            else ""
+                        )
                     ),
-                    "Your real score history",
-                    [
-                        {"label": "Your average", "detail": f"{dashboard['average']}"},
-                        {
-                            "label": "Class average",
-                            "detail": f"{dashboard['classAverage']}",
-                        },
-                    ],
+                    txt(language, "Your real score history", "سجل درجاتك الفعلي"),
+                    evidence_rows,
                     None,
                 )
             )
@@ -296,20 +508,40 @@ def _recommendations_from_context(
                     "weakest_exam",
                     worst["score"],
                     PASS_MARK,
-                    f"Your weakest recorded exam is {worst['exam']} at {worst['score']}",
-                    "Your real score timeline",
+                    txt(
+                        language,
+                        f"Your weakest recorded exam is {worst['exam']} at {worst['score']}",
+                        f"أضعف امتحان مسجّل لديك هو {worst['exam']} بدرجة {worst['score']}",
+                    ),
+                    txt(
+                        language,
+                        "Your real score timeline",
+                        "الجدول الزمني الفعلي لدرجاتك",
+                    ),
                     [
                         {
                             "label": worst["exam"],
-                            "detail": f"Score {worst['score']} vs class {worst['classAverage']}",
+                            "detail": txt(
+                                language,
+                                f"Score {worst['score']} vs class {worst['classAverage']}",
+                                f"الدرجة {worst['score']} مقابل الصف {worst['classAverage']}",
+                            ),
                         }
                     ],
                     {
-                        "label": "Open my progress",
+                        "label": txt(language, "Open my progress", "فتح تقدمي"),
                         "to": "/my-progress",
-                        "confirmTitle": "Open your progress page?",
-                        "confirmBody": "Opens your personal dashboard for this exam.",
-                        "confirmLabel": "Open",
+                        "confirmTitle": txt(
+                            language,
+                            "Open your progress page?",
+                            "فتح صفحة تقدمك؟",
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "Opens your personal dashboard for this exam.",
+                            "يفتح لوحتك الشخصية لهذا الامتحان.",
+                        ),
+                        "confirmLabel": txt(language, "Open", "فتح"),
                     },
                 )
             )
@@ -320,6 +552,7 @@ def _recommendations_from_context(
         colleges = overview.get("passRateByCollege") or []
         if colleges:
             weakest = min(colleges, key=lambda c: c["passRate"])
+            weak = entity(language, weakest["college"])
             items.append(
                 _structured_recommendation(
                     "m1",
@@ -327,20 +560,44 @@ def _recommendations_from_context(
                     "college_pass_rate",
                     weakest["passRate"],
                     PASS_MARK,
-                    f"{weakest['college']} pass rate is {weakest['passRate']}% — review curriculum calibration",
-                    "Current pass rate by college",
+                    txt(
+                        language,
+                        f"{weak} pass rate is {weakest['passRate']}% — review curriculum calibration",
+                        f"معدل نجاح {weak} هو {weakest['passRate']}% — راجع معايرة المقرر",
+                    ),
+                    txt(
+                        language,
+                        "Current pass rate by college",
+                        "معدل النجاح الحالي حسب الكلية",
+                    ),
                     [
                         {
-                            "label": weakest["college"],
-                            "detail": f"{weakest['passRate']}% pass, {weakest['participants']} participants",
+                            "label": weak,
+                            "detail": txt(
+                                language,
+                                f"{weakest['passRate']}% pass, {weakest['participants']} participants",
+                                f"{weakest['passRate']}% نجاح، {weakest['participants']} مشاركًا",
+                            ),
                         }
                     ],
                     {
-                        "label": "Open curriculum drill-down",
+                        "label": txt(
+                            language,
+                            "Open curriculum drill-down",
+                            "فتح تفصيل المقررات",
+                        ),
                         "to": "/courses",
-                        "confirmTitle": f"Open the {weakest['college']} drill-down?",
-                        "confirmBody": "Opens the curriculum performance view filtered to this college. Nothing is shared externally.",
-                        "confirmLabel": "Open drill-down",
+                        "confirmTitle": txt(
+                            language,
+                            f"Open the {weak} drill-down?",
+                            f"فتح تفصيل {weak}؟",
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "Opens the curriculum performance view filtered to this college. Nothing is shared externally.",
+                            "يفتح عرض أداء المقررات مفلترًا لهذه الكلية. لا يُشارك شيء خارجيًا.",
+                        ),
+                        "confirmLabel": txt(language, "Open drill-down", "فتح التفصيل"),
                     },
                 )
             )
@@ -354,21 +611,45 @@ def _recommendations_from_context(
                         "flagged_attempts",
                         integrity["flaggedCount"],
                         0,
-                        f"{integrity['flaggedCount']} of {integrity['totalAttempts']} monitored attempts are flagged",
-                        "Current integrity monitoring",
+                        txt(
+                            language,
+                            f"{integrity['flaggedCount']} of {integrity['totalAttempts']} monitored attempts are flagged",
+                            f"{integrity['flaggedCount']} من {integrity['totalAttempts']} محاولة مراقَبة معلّمة",
+                        ),
+                        txt(
+                            language,
+                            "Current integrity monitoring",
+                            "مراقبة النزاهة الحالية",
+                        ),
                         [
                             {
-                                "label": "Flagged",
-                                "detail": f"{integrity['flaggedCount']} of {integrity['totalAttempts']} attempts",
+                                "label": txt(language, "Flagged", "معلّمة"),
+                                "detail": txt(
+                                    language,
+                                    f"{integrity['flaggedCount']} of {integrity['totalAttempts']} attempts",
+                                    f"{integrity['flaggedCount']} من {integrity['totalAttempts']} محاولة",
+                                ),
                             }
                         ],
                         (
                             {
-                                "label": "Open case list",
+                                "label": txt(
+                                    language, "Open case list", "فتح قائمة الحالات"
+                                ),
                                 "to": "/integrity",
-                                "confirmTitle": "Open the case list?",
-                                "confirmBody": "Opens the monitoring log. No case status changes.",
-                                "confirmLabel": "Open case list",
+                                "confirmTitle": txt(
+                                    language,
+                                    "Open the case list?",
+                                    "فتح قائمة الحالات؟",
+                                ),
+                                "confirmBody": txt(
+                                    language,
+                                    "Opens the monitoring log. No case status changes.",
+                                    "يفتح سجل المراقبة. لا تتغير حالات الحالات.",
+                                ),
+                                "confirmLabel": txt(
+                                    language, "Open case list", "فتح قائمة الحالات"
+                                ),
                             }
                             if integrity["flaggedCount"]
                             else None
@@ -386,20 +667,36 @@ def _recommendations_from_context(
                         "discrimination_index",
                         top["discriminationIndex"],
                         0.2,
-                        f"{top['exam']} question {top['number']} flagged — schedule an item review with faculty",
-                        "Current item analysis",
+                        txt(
+                            language,
+                            f"{top['exam']} question {top['number']} flagged — schedule an item review with faculty",
+                            f"السؤال {top['number']} في {top['exam']} معلّم — جدولة مراجعة بند مع أعضاء هيئة التدريس",
+                        ),
+                        txt(language, "Current item analysis", "تحليل البنود الحالي"),
                         [
                             {
                                 "label": f"Q{top['number']}",
-                                "detail": f"Discrimination {top['discriminationIndex']}",
+                                "detail": txt(
+                                    language,
+                                    f"Discrimination {top['discriminationIndex']}",
+                                    f"التمييز {top['discriminationIndex']}",
+                                ),
                             }
                         ],
                         {
-                            "label": "Open item analysis",
+                            "label": txt(
+                                language, "Open item analysis", "فتح تحليل البنود"
+                            ),
                             "to": "/item-analysis",
-                            "confirmTitle": "Open item analysis?",
-                            "confirmBody": "Opens item analysis for flagged questions. No items are published or retired.",
-                            "confirmLabel": "Open",
+                            "confirmTitle": txt(
+                                language, "Open item analysis?", "فتح تحليل البنود؟"
+                            ),
+                            "confirmBody": txt(
+                                language,
+                                "Opens item analysis for flagged questions. No items are published or retired.",
+                                "يفتح تحليل البنود للأسئلة المعلّمة. لا يُنشر أو يُستبعد أي بند.",
+                            ),
+                            "confirmLabel": txt(language, "Open", "فتح"),
                         },
                     )
                 )
@@ -419,20 +716,42 @@ def _recommendations_from_context(
                     "students_below_pass",
                     len(below_pass),
                     0,
-                    f"Follow up with {len(below_pass)} student(s) below the pass mark",
-                    "Current student performance",
+                    txt(
+                        language,
+                        f"Follow up with {len(below_pass)} student(s) below the pass mark",
+                        f"تابع مع {len(below_pass)} طالبًا دون درجة النجاح",
+                    ),
+                    txt(
+                        language,
+                        "Current student performance",
+                        "أداء الطلاب الحالي",
+                    ),
                     [
                         {
-                            "label": "Below pass",
-                            "detail": f"{len(below_pass)} students this term",
+                            "label": txt(language, "Below pass", "دون النجاح"),
+                            "detail": txt(
+                                language,
+                                f"{len(below_pass)} students this term",
+                                f"{len(below_pass)} طالبًا هذا الفصل",
+                            ),
                         }
                     ],
                     {
-                        "label": "Open student performance",
+                        "label": txt(
+                            language, "Open student performance", "فتح أداء الطلاب"
+                        ),
                         "to": "/performance",
-                        "confirmTitle": "Open student performance?",
-                        "confirmBody": "Opens the college performance view. No messages are sent to students.",
-                        "confirmLabel": "Open",
+                        "confirmTitle": txt(
+                            language,
+                            "Open student performance?",
+                            "فتح أداء الطلاب؟",
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "Opens the college performance view. No messages are sent to students.",
+                            "يفتح عرض أداء الكلية. لا تُرسل رسائل إلى الطلاب.",
+                        ),
+                        "confirmLabel": txt(language, "Open", "فتح"),
                     },
                 )
             )
@@ -446,20 +765,38 @@ def _recommendations_from_context(
                     "curriculum_attendance",
                     weakest_att["attendance"],
                     90,
-                    f"Review {weakest_att['course']} attendance ({weakest_att['attendance']}%)",
-                    "Current attendance by curriculum",
+                    txt(
+                        language,
+                        f"Review {weakest_att['course']} attendance ({weakest_att['attendance']}%)",
+                        f"راجع حضور {weakest_att['course']} ({weakest_att['attendance']}%)",
+                    ),
+                    txt(
+                        language,
+                        "Current attendance by curriculum",
+                        "الحضور الحالي حسب المقرر",
+                    ),
                     [
                         {
                             "label": weakest_att["course"],
-                            "detail": f"{weakest_att['attendance']}% attendance",
+                            "detail": txt(
+                                language,
+                                f"{weakest_att['attendance']}% attendance",
+                                f"{weakest_att['attendance']}% حضور",
+                            ),
                         }
                     ],
                     {
-                        "label": "Open attendance",
+                        "label": txt(language, "Open attendance", "فتح الحضور"),
                         "to": "/participation",
-                        "confirmTitle": "Open attendance?",
-                        "confirmBody": "Opens participation and attendance for every curriculum in the college.",
-                        "confirmLabel": "Open",
+                        "confirmTitle": txt(
+                            language, "Open attendance?", "فتح الحضور؟"
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "Opens participation and attendance for every curriculum in the college.",
+                            "يفتح المشاركة والحضور لكل مقرر في الكلية.",
+                        ),
+                        "confirmLabel": txt(language, "Open", "فتح"),
                     },
                 )
             )
@@ -477,20 +814,42 @@ def _recommendations_from_context(
                     "section_average",
                     weakest_section["average"],
                     PASS_MARK,
-                    f"{weakest_section['section']} averages {weakest_section['average']} — consider a review session",
-                    "Current section performance",
+                    txt(
+                        language,
+                        f"{weakest_section['section']} averages {weakest_section['average']} — consider a review session",
+                        f"متوسط {weakest_section['section']} هو {weakest_section['average']} — فكّر في جلسة مراجعة",
+                    ),
+                    txt(
+                        language,
+                        "Current section performance",
+                        "أداء الشعب الحالي",
+                    ),
                     [
                         {
                             "label": weakest_section["section"],
-                            "detail": f"{weakest_section['average']} avg, {weakest_section['passRate']}% pass",
+                            "detail": txt(
+                                language,
+                                f"{weakest_section['average']} avg, {weakest_section['passRate']}% pass",
+                                f"{weakest_section['average']} متوسط، {weakest_section['passRate']}% نجاح",
+                            ),
                         }
                     ],
                     {
-                        "label": "Compare sections",
+                        "label": txt(language, "Compare sections", "مقارنة الشعب"),
                         "to": "/performance",
-                        "confirmTitle": "Open the section comparison?",
-                        "confirmBody": "This opens section performance for your curriculum. No message is sent to students.",
-                        "confirmLabel": "Open comparison",
+                        "confirmTitle": txt(
+                            language,
+                            "Open the section comparison?",
+                            "فتح مقارنة الشعب؟",
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "This opens section performance for your curriculum. No message is sent to students.",
+                            "يفتح أداء الشعب لمقررك. لا تُرسل رسالة إلى الطلاب.",
+                        ),
+                        "confirmLabel": txt(
+                            language, "Open comparison", "فتح المقارنة"
+                        ),
                     },
                 )
             )
@@ -503,20 +862,38 @@ def _recommendations_from_context(
                     "discrimination_index",
                     top["discriminationIndex"],
                     0.2,
-                    f"Question {top['number']} on {top['exam']} flagged for review — low discrimination index",
-                    "Current item analysis",
+                    txt(
+                        language,
+                        f"Question {top['number']} on {top['exam']} flagged for review — low discrimination index",
+                        f"السؤال {top['number']} في {top['exam']} معلّم للمراجعة — مؤشر تمييز منخفض",
+                    ),
+                    txt(language, "Current item analysis", "تحليل البنود الحالي"),
                     [
                         {
                             "label": f"Q{top['number']}",
-                            "detail": f"Discrimination {top['discriminationIndex']}",
+                            "detail": txt(
+                                language,
+                                f"Discrimination {top['discriminationIndex']}",
+                                f"التمييز {top['discriminationIndex']}",
+                            ),
                         }
                     ],
                     {
-                        "label": "Open in Item Analysis",
+                        "label": txt(
+                            language, "Open in Item Analysis", "فتح في تحليل البنود"
+                        ),
                         "to": "/item-analysis",
-                        "confirmTitle": "Open the flagged question?",
-                        "confirmBody": "Item Analysis opens filtered to this question. Nothing is changed or published.",
-                        "confirmLabel": "Open question",
+                        "confirmTitle": txt(
+                            language,
+                            "Open the flagged question?",
+                            "فتح السؤال المعلّم؟",
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "Item Analysis opens filtered to this question. Nothing is changed or published.",
+                            "يفتح تحليل البنود مفلترًا لهذا السؤال. لا يُغيّر أو يُنشر شيء.",
+                        ),
+                        "confirmLabel": txt(language, "Open question", "فتح السؤال"),
                     },
                 )
             )
@@ -534,15 +911,31 @@ def _recommendations_from_context(
                     "integrity_signals",
                     len(top["evidence"]),
                     1,
-                    f"Recommended for review: {top['student']} / {top['exam']}",
-                    f"Fused from {len(top['evidence'])} real signal(s)",
+                    txt(
+                        language,
+                        f"Recommended for review: {top['student']} / {top['exam']}",
+                        f"موصى بالمراجعة: {top['student']} / {top['exam']}",
+                    ),
+                    txt(
+                        language,
+                        f"Fused from {len(top['evidence'])} real signal(s)",
+                        f"مدموج من {len(top['evidence'])} إشارة فعلية",
+                    ),
                     top["evidence"],
                     {
-                        "label": "Create case",
+                        "label": txt(language, "Create case", "إنشاء حالة"),
                         "to": "/integrity",
-                        "confirmTitle": "Create an investigation case?",
-                        "confirmBody": "Opens the case with the evidence above pre-attached and marked recommended for review. No finding is recorded and no one is notified.",
-                        "confirmLabel": "Create case",
+                        "confirmTitle": txt(
+                            language,
+                            "Create an investigation case?",
+                            "إنشاء حالة تحقيق؟",
+                        ),
+                        "confirmBody": txt(
+                            language,
+                            "Opens the case with the evidence above pre-attached and marked recommended for review. No finding is recorded and no one is notified.",
+                            "يفتح الحالة مع الأدلة أعلاه مرفقة ومعلّمة كموصى بالمراجعة. لا يُسجّل أي استنتاج ولا يُبلَّغ أحد.",
+                        ),
+                        "confirmLabel": txt(language, "Create case", "إنشاء حالة"),
                     },
                 )
             )
@@ -554,12 +947,24 @@ def _recommendations_from_context(
                     "flagged_attempts",
                     report["flaggedCount"],
                     0,
-                    f"{report['flaggedCount']} of {report['totalAttempts']} monitored attempts are currently flagged",
-                    "Current integrity monitoring",
+                    txt(
+                        language,
+                        f"{report['flaggedCount']} of {report['totalAttempts']} monitored attempts are currently flagged",
+                        f"{report['flaggedCount']} من {report['totalAttempts']} محاولة مراقَبة معلّمة حاليًا",
+                    ),
+                    txt(
+                        language,
+                        "Current integrity monitoring",
+                        "مراقبة النزاهة الحالية",
+                    ),
                     [
                         {
-                            "label": "Flagged",
-                            "detail": f"{report['flaggedCount']} of {report['totalAttempts']}",
+                            "label": txt(language, "Flagged", "معلّمة"),
+                            "detail": txt(
+                                language,
+                                f"{report['flaggedCount']} of {report['totalAttempts']}",
+                                f"{report['flaggedCount']} من {report['totalAttempts']}",
+                            ),
                         }
                     ],
                     None,
@@ -570,7 +975,9 @@ def _recommendations_from_context(
     return None
 
 
-def _unavailable(message: str, status: str = "unavailable") -> dict:
+def _unavailable(
+    message: str, status: str = "unavailable", language: Language = "en"
+) -> dict:
     return {
         "insight": None,
         "prediction": None,
@@ -619,13 +1026,20 @@ async def _compute_decision(
     filters: AnalyticsFilters,
     insight_id: str,
     data_version: str,
+    language: Language = "en",
 ) -> dict:
     data = await load_ai_context(ctx, db, filters)
     evidence = build_evidence(ctx.role, data)
-    warnings = build_warnings(ctx.role, evidence, data)
-    insight = _attach_warnings(_insight_from_context(ctx.role, data), warnings)
-    prediction = await get_standing_or_forecast(ctx, db, filters, data)
-    recommendations = _recommendations_from_context(ctx.role, data, insight_id)
+    warnings = build_warnings(ctx.role, evidence, data, language=language)
+    insight = _attach_warnings(
+        _insight_from_context(ctx.role, data, language), warnings
+    )
+    prediction = await get_standing_or_forecast(
+        ctx, db, filters, data, language=language
+    )
+    recommendations = _recommendations_from_context(
+        ctx.role, data, insight_id, language
+    )
     return {
         "insight": insight,
         "prediction": prediction,
@@ -638,6 +1052,7 @@ async def _compute_decision(
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "dataVersion": data_version,
             "filters": filters.model_dump(),
+            "language": language,
         },
         "validation": {"status": "not_run", "failures": 0},
         "dataStatus": "ready" if evidence else "insufficient",
@@ -684,7 +1099,9 @@ async def get_ai_decision(
     db: asyncpg.Connection,
     filters: AnalyticsFilters,
     insight_id: str = "insight",
+    language: Language | str = "en",
 ) -> dict:
+    language = normalize_language(str(language))
     year_id = (
         await db.fetchval("SELECT id FROM academic_years WHERE is_current LIMIT 1")
         or ""
@@ -710,22 +1127,37 @@ async def get_ai_decision(
         academic_year_id=year_id,
         term_id=term_id,
         data_version=data_version,
+        language=language,
     )
     cached = ai_cache.get(key)
     if cached is not None:
         return cached
     try:
         result = await asyncio.wait_for(
-            _compute_decision(ctx, db, filters, insight_id, data_version),
+            _compute_decision(
+                ctx, db, filters, insight_id, data_version, language=language
+            ),
             timeout=settings.AI_BUDGET_SECONDS,
         )
     except asyncio.TimeoutError:
         return _unavailable(
-            "AI analysis is taking longer than expected.",
+            txt(
+                language,
+                "AI analysis is taking longer than expected.",
+                "تحليل الذكاء الاصطناعي يستغرق وقتًا أطول من المتوقع.",
+            ),
             status="timeout",
+            language=language,
         )
     except Exception:
-        return _unavailable("AI analysis is temporarily unavailable.")
+        return _unavailable(
+            txt(
+                language,
+                "AI analysis is temporarily unavailable.",
+                "تحليل الذكاء الاصطناعي غير متاح مؤقتًا.",
+            ),
+            language=language,
+        )
 
     if narration_enabled() and has_narratable_text(result):
         result["narrationStatus"] = "pending"
@@ -748,16 +1180,26 @@ async def get_ai_decision(
 
 
 async def get_insight(
-    ctx: UserContext, db: asyncpg.Connection, filters: AnalyticsFilters | None = None
+    ctx: UserContext,
+    db: asyncpg.Connection,
+    filters: AnalyticsFilters | None = None,
+    language: Language | str = "en",
 ):
-    decision = await get_ai_decision(ctx, db, filters or AnalyticsFilters())
+    decision = await get_ai_decision(
+        ctx, db, filters or AnalyticsFilters(), language=language
+    )
     return decision.get("insight")
 
 
 async def get_prediction(
-    ctx: UserContext, db: asyncpg.Connection, filters: AnalyticsFilters | None = None
+    ctx: UserContext,
+    db: asyncpg.Connection,
+    filters: AnalyticsFilters | None = None,
+    language: Language | str = "en",
 ):
-    decision = await get_ai_decision(ctx, db, filters or AnalyticsFilters())
+    decision = await get_ai_decision(
+        ctx, db, filters or AnalyticsFilters(), language=language
+    )
     return decision.get("prediction")
 
 
@@ -766,6 +1208,9 @@ async def get_recommendations(
     db: asyncpg.Connection,
     insight_id: str,
     filters: AnalyticsFilters | None = None,
+    language: Language | str = "en",
 ):
-    decision = await get_ai_decision(ctx, db, filters or AnalyticsFilters(), insight_id)
+    decision = await get_ai_decision(
+        ctx, db, filters or AnalyticsFilters(), insight_id, language=language
+    )
     return decision.get("recommendations")

@@ -1,16 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { getManagementOverview } from "@/lib/api";
 import { AiDecisionSection } from "@/components/ai-insights";
 import {
@@ -23,8 +14,16 @@ import {
   chartColors,
   tooltipStyle,
 } from "@/components/dashboard/dashboard-ui";
+import {
+  AxisValueTick,
+  CategoryTick,
+  ChartLegend,
+  MirroredChart,
+  tooltipMirrorStyle,
+} from "@/components/dashboard/chart-rtl";
 import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
+import { useLocale, translateOrgName } from "@/lib/i18n";
 import { roleGuard } from "@/lib/auth/role-guards";
 import {
   activityMonthOptions,
@@ -67,12 +66,17 @@ function chartHeight(rows: number, rowPx = 36, min = 240) {
 }
 
 function ExamActivity() {
+  const { locale, messages } = useLocale();
+  const rtl = locale === "ar";
+  const c = messages.common;
+  const ea = messages.examActivity;
+  const o = messages.overview;
   const { filters, filtersReady, queryKey, enabled } = useFilteredQuery(
     "management-overview",
   );
   const { data, isPending } = useQuery({
-    queryKey,
-    queryFn: () => getManagementOverview(filters),
+    queryKey: [...queryKey, locale],
+    queryFn: () => getManagementOverview(filters, locale),
     enabled,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
@@ -89,34 +93,45 @@ function ExamActivity() {
   );
   const semesterOptions = useMemo(
     () => [
-      { value: "all", label: "All semesters" },
+      { value: "all", label: c.allSemesters },
       ...activitySemesterOptions(periodRows),
     ],
-    [periodRows],
+    [c.allSemesters, periodRows],
   );
   const monthOptions = useMemo(
     () => [
-      { value: "all", label: "All months" },
-      ...activityMonthOptions(periodRows, semesterId),
+      { value: "all", label: c.allMonths },
+      ...activityMonthOptions(periodRows, semesterId, locale),
     ],
-    [periodRows, semesterId],
+    [c.allMonths, locale, periodRows, semesterId],
   );
   const chartRows = useMemo(
-    () => filterActivityTrend(trend, semesterId, monthKey),
-    [trend, semesterId, monthKey],
+    () => filterActivityTrend(trend, semesterId, monthKey, locale),
+    [trend, semesterId, monthKey, locale],
   );
   const exams = useMemo(
     () => filterExamSummaries(examSummaries, semesterId, monthKey),
     [examSummaries, semesterId, monthKey],
   );
-  const colleges = useMemo(() => examsByCollege(exams), [exams]);
+  const colleges = useMemo(() => {
+    return examsByCollege(exams).map((row) => ({
+      ...row,
+      displayCollege: translateOrgName(row.college, locale),
+    }));
+  }, [exams, locale]);
   const selectedCollege = colleges.some((row) => row.college === scoreCollege)
     ? scoreCollege
     : (colleges[0]?.college ?? "");
+  const selectedCollegeLabel =
+    colleges.find((row) => row.college === selectedCollege)?.displayCollege ??
+    selectedCollege;
   const scores = useMemo(
     () =>
-      examScoreRows(exams.filter((exam) => exam.college === selectedCollege)),
-    [exams, selectedCollege],
+      examScoreRows(
+        exams.filter((exam) => exam.college === selectedCollege),
+        locale,
+      ),
+    [exams, locale, selectedCollege],
   );
 
   useEffect(() => {
@@ -138,12 +153,12 @@ function ExamActivity() {
   if (isPending || !data) return <ScreenSkeleton cards={3} panels={3} />;
 
   const latest = chartRows[chartRows.length - 1];
-  const change = monthExamChange(chartRows);
-  const insight = examActivityInsight(exams, chartRows);
+  const change = monthExamChange(chartRows, locale);
+  const insight = examActivityInsight(exams, chartRows, locale);
 
   function onSemesterChange(id: string) {
     setSemesterId(id);
-    const nextMonths = activityMonthOptions(periodRows, id);
+    const nextMonths = activityMonthOptions(periodRows, id, locale);
     if (monthKey !== "all" && !nextMonths.some((m) => m.value === monthKey)) {
       setMonthKey("all");
     }
@@ -152,13 +167,13 @@ function ExamActivity() {
   const periodFilters = (
     <FilterBar>
       <Select
-        label="Semester"
+        label={c.semester}
         value={semesterId}
         options={semesterOptions}
         onChange={onSemesterChange}
       />
       <Select
-        label="Month"
+        label={c.month}
         value={monthKey}
         options={monthOptions}
         onChange={setMonthKey}
@@ -166,18 +181,32 @@ function ExamActivity() {
     </FilterBar>
   );
 
+  const axisTick = (props: {
+    x?: number;
+    y?: number;
+    payload?: { value?: string | number };
+  }) => (
+    <CategoryTick
+      x={props.x}
+      y={props.y}
+      payload={{ value: String(props.payload?.value ?? "") }}
+      mirror={rtl}
+      limit={22}
+    />
+  );
+
   return (
     <>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBlock
-          label="Exams in latest month"
+          label={ea.examsLatestMonth}
           value={(latest?.exams ?? 0).toLocaleString()}
-          sub={latest?.label ?? "No exams in this view"}
+          sub={latest?.label ?? ea.noExamsInView}
         />
         <StatBlock
-          label="Students who sat"
+          label={c.studentsWhoSat}
           value={(latest?.participants ?? 0).toLocaleString()}
-          sub={latest ? `Unique students in ${latest.label}` : ""}
+          sub={latest ? ea.uniqueInMonth.replace("{label}", latest.label) : ""}
           tone="iris"
         />
         <StatBlock
@@ -193,288 +222,342 @@ function ExamActivity() {
       </AiInsight>
       <AiDecisionSection />
 
-      <Panel title="Exams and students each month" action={periodFilters}>
-        <p className="mb-3 text-[12px] text-ink-soft">
-          Exams held, and the number of students who sat at least one. Each
-          chart has its own scale.
-        </p>
+      <Panel title={ea.monthlyTitle} action={periodFilters}>
+        <p className="mb-3 text-[12px] text-ink-soft">{ea.monthlyHint}</p>
         {chartRows.length ? (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <div>
-              <p className="mb-2 text-[12px] font-semibold text-ink">Exams</p>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartRows}
-                    margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
-                  >
-                    <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      interval={0}
-                      tick={{ fontSize: 11, fill: chartColors.axis }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: chartColors.axis }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(value: number) => [count(value), "Exams"]}
-                    />
-                    <Bar
-                      isAnimationActive={false}
-                      dataKey="exams"
-                      name="Exams"
-                      fill={chartColors.iris}
-                      maxBarSize={48}
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <p className="mb-2 text-[12px] font-semibold text-ink">
+                {c.exams}
+              </p>
+              <MirroredChart rtl={rtl} height={256}>
+                <BarChart
+                  data={chartRows}
+                  margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
+                >
+                  <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    interval={0}
+                    tick={(props) => (
+                      <AxisValueTick
+                        x={props.x}
+                        y={props.y}
+                        payload={props.payload}
+                        mirror={rtl}
+                      />
+                    )}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={(props) => (
+                      <AxisValueTick
+                        x={props.x}
+                        y={props.y}
+                        payload={props.payload}
+                        mirror={rtl}
+                        dy={4}
+                      />
+                    )}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    wrapperStyle={tooltipMirrorStyle(rtl)}
+                    formatter={(value: number) => [count(value), c.exams]}
+                  />
+                  <Bar
+                    isAnimationActive={false}
+                    dataKey="exams"
+                    name={c.exams}
+                    fill={chartColors.iris}
+                    maxBarSize={48}
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
+              </MirroredChart>
             </div>
             <div>
               <p className="mb-2 text-[12px] font-semibold text-ink">
-                Students who sat
+                {c.studentsWhoSat}
               </p>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={chartRows}
-                    margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
-                  >
-                    <CartesianGrid stroke={chartColors.grid} vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      interval={0}
-                      tick={{ fontSize: 11, fill: chartColors.axis }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      allowDecimals={false}
-                      tick={{ fontSize: 11, fill: chartColors.axis }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(value: number) => count(value)}
-                    />
-                    <Tooltip
-                      contentStyle={tooltipStyle}
-                      formatter={(value: number) => [
-                        count(value),
-                        "Students who sat",
-                      ]}
-                    />
-                    <Bar
-                      isAnimationActive={false}
-                      dataKey="participants"
-                      name="Students who sat"
-                      fill={chartColors.cyan}
-                      maxBarSize={48}
-                      radius={[8, 8, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <MirroredChart rtl={rtl} height={256}>
+                <BarChart
+                  data={chartRows}
+                  margin={{ top: 8, right: 8, bottom: 0, left: -4 }}
+                >
+                  <CartesianGrid stroke={chartColors.grid} vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    interval={0}
+                    tick={(props) => (
+                      <AxisValueTick
+                        x={props.x}
+                        y={props.y}
+                        payload={props.payload}
+                        mirror={rtl}
+                      />
+                    )}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={(props) => (
+                      <AxisValueTick
+                        x={props.x}
+                        y={props.y}
+                        payload={{
+                          value: count(Number(props.payload?.value ?? 0)),
+                        }}
+                        mirror={rtl}
+                        dy={4}
+                      />
+                    )}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    wrapperStyle={tooltipMirrorStyle(rtl)}
+                    formatter={(value: number) => [
+                      count(value),
+                      c.studentsWhoSat,
+                    ]}
+                  />
+                  <Bar
+                    isAnimationActive={false}
+                    dataKey="participants"
+                    name={c.studentsWhoSat}
+                    fill={chartColors.cyan}
+                    maxBarSize={48}
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
+              </MirroredChart>
             </div>
           </div>
         ) : (
           <p className="py-10 text-center text-[13px] text-ink-soft">
-            No exams in this month or semester.
+            {ea.emptyPeriod}
           </p>
         )}
       </Panel>
 
       {colleges.length ? (
         <div className="grid grid-cols-1 gap-4">
-          <Panel title="Exams administered by college">
-            <p className="mb-3 text-[12px] text-ink-soft">
-              Distinct exams in this view. A course with two sittings counts as
-              two exams.
-            </p>
-            <div style={{ height: chartHeight(colleges.length, 36, 280) }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={colleges}
-                  layout="vertical"
-                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-                >
-                  <CartesianGrid stroke={chartColors.grid} horizontal={false} />
-                  <XAxis
-                    type="number"
-                    allowDecimals={false}
-                    tick={{ fontSize: 11, fill: chartColors.axis }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="college"
-                    width={280}
-                    interval={0}
-                    tick={{ fontSize: 11, fill: chartColors.axis }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value: number) => [count(value), "Exams"]}
-                  />
-                  <Bar
-                    isAnimationActive={false}
-                    dataKey="exams"
-                    name="Exams"
-                    fill={chartColors.iris}
-                    maxBarSize={22}
-                    radius={[0, 8, 8, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <Panel title={ea.byCollegeTitle}>
+            <p className="mb-3 text-[12px] text-ink-soft">{ea.byCollegeHint}</p>
+            <MirroredChart
+              rtl={rtl}
+              height={chartHeight(colleges.length, 36, 280)}
+            >
+              <BarChart
+                data={colleges}
+                layout="vertical"
+                margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+              >
+                <CartesianGrid stroke={chartColors.grid} horizontal={false} />
+                <XAxis
+                  type="number"
+                  allowDecimals={false}
+                  tick={(props) => (
+                    <AxisValueTick
+                      x={props.x}
+                      y={props.y}
+                      payload={props.payload}
+                      mirror={rtl}
+                    />
+                  )}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="displayCollege"
+                  width={160}
+                  interval={0}
+                  tick={axisTick}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  wrapperStyle={tooltipMirrorStyle(rtl)}
+                  formatter={(value: number) => [count(value), c.exams]}
+                />
+                <Bar
+                  isAnimationActive={false}
+                  dataKey="exams"
+                  name={c.exams}
+                  fill={chartColors.iris}
+                  maxBarSize={22}
+                  radius={[0, 8, 8, 0]}
+                />
+              </BarChart>
+            </MirroredChart>
           </Panel>
 
-          <Panel title="Exam sitting outcomes">
-            <p className="mb-3 text-[12px] text-ink-soft">
-              Passed, failed and absent sittings for the exams in this view.
-            </p>
-            <div style={{ height: chartHeight(colleges.length, 36, 280) }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={colleges}
-                  layout="vertical"
-                  margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
-                >
-                  <CartesianGrid stroke={chartColors.grid} horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tick={{ fontSize: 11, fill: chartColors.axis }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(value: number) => count(value)}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="college"
-                    width={280}
-                    interval={0}
-                    tick={{ fontSize: 11, fill: chartColors.axis }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value: number, name: string) => [
-                      count(value),
-                      name,
-                    ]}
-                  />
-                  <Legend
-                    wrapperStyle={{ fontSize: 11, color: chartColors.axis }}
-                  />
-                  <Bar
-                    isAnimationActive={false}
-                    dataKey="passed"
-                    name="Passed"
-                    stackId="outcome"
-                    fill={chartColors.mint}
-                    maxBarSize={22}
-                  />
-                  <Bar
-                    isAnimationActive={false}
-                    dataKey="failed"
-                    name="Failed"
-                    stackId="outcome"
-                    fill={chartColors.rose}
-                    maxBarSize={22}
-                  />
-                  <Bar
-                    isAnimationActive={false}
-                    dataKey="absent"
-                    name="Absent"
-                    stackId="outcome"
-                    fill={chartColors.yellow}
-                    maxBarSize={22}
-                    radius={[0, 8, 8, 0]}
-                  />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <Panel title={ea.outcomesTitle}>
+            <p className="mb-3 text-[12px] text-ink-soft">{ea.outcomesHint}</p>
+            <MirroredChart
+              rtl={rtl}
+              height={chartHeight(colleges.length, 36, 280)}
+            >
+              <BarChart
+                data={colleges}
+                layout="vertical"
+                margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+              >
+                <CartesianGrid stroke={chartColors.grid} horizontal={false} />
+                <XAxis
+                  type="number"
+                  tick={(props) => (
+                    <AxisValueTick
+                      x={props.x}
+                      y={props.y}
+                      payload={{
+                        value: count(Number(props.payload?.value ?? 0)),
+                      }}
+                      mirror={rtl}
+                    />
+                  )}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="displayCollege"
+                  width={160}
+                  interval={0}
+                  tick={axisTick}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  wrapperStyle={tooltipMirrorStyle(rtl)}
+                  formatter={(value: number, name: string) => [
+                    count(value),
+                    name,
+                  ]}
+                />
+                <Bar
+                  isAnimationActive={false}
+                  dataKey="passed"
+                  name={o.passed}
+                  stackId="outcome"
+                  fill={chartColors.mint}
+                  maxBarSize={22}
+                />
+                <Bar
+                  isAnimationActive={false}
+                  dataKey="failed"
+                  name={o.failed}
+                  stackId="outcome"
+                  fill={chartColors.rose}
+                  maxBarSize={22}
+                />
+                <Bar
+                  isAnimationActive={false}
+                  dataKey="absent"
+                  name={o.absent}
+                  stackId="outcome"
+                  fill={chartColors.yellow}
+                  maxBarSize={22}
+                  radius={[0, 8, 8, 0]}
+                />
+              </BarChart>
+            </MirroredChart>
+            <ChartLegend
+              items={[
+                { label: o.passed, color: chartColors.mint },
+                { label: o.failed, color: chartColors.rose },
+                { label: o.absent, color: chartColors.yellow },
+              ]}
+            />
           </Panel>
         </div>
       ) : null}
 
       {selectedCollege ? (
         <Panel
-          title="Exam scores"
+          title={ea.scoresTitle}
           action={
             <Select
-              label="College"
+              label={o.college}
               value={selectedCollege}
               options={colleges.map((row) => ({
                 value: row.college,
-                label: row.college,
+                label: row.displayCollege,
               }))}
               onChange={setScoreCollege}
             />
           }
         >
           <p className="mb-3 text-[12px] text-ink-soft">
-            Average score for each exam in {selectedCollege}, lowest first.
+            {ea.scoresHint.replace("{college}", selectedCollegeLabel)}
           </p>
-          <div style={{ height: chartHeight(scores.length, 34, 240) }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={scores}
-                layout="vertical"
-                margin={{ top: 8, right: 48, left: 8, bottom: 8 }}
-              >
-                <CartesianGrid stroke={chartColors.grid} horizontal={false} />
-                <XAxis
-                  type="number"
-                  domain={[0, 100]}
-                  unit="%"
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  width={148}
-                  interval={0}
-                  tick={{ fontSize: 11, fill: chartColors.axis }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(value: number, name: string, item) => {
-                    const row = item?.payload as (typeof scores)[number];
-                    if (name === "Average score") {
-                      return [
-                        `${Number(value).toFixed(1)}% · ${row.passRate}% passed · ${row.title}`,
-                        name,
-                      ];
-                    }
-                    return [value, name];
-                  }}
-                />
-                <Bar
-                  isAnimationActive={false}
-                  dataKey="avgScore"
-                  name="Average score"
-                  fill={chartColors.violet}
-                  maxBarSize={22}
-                  radius={[0, 8, 8, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+          <MirroredChart rtl={rtl} height={chartHeight(scores.length, 34, 240)}>
+            <BarChart
+              data={scores}
+              layout="vertical"
+              margin={{ top: 8, right: 48, left: 8, bottom: 8 }}
+            >
+              <CartesianGrid stroke={chartColors.grid} horizontal={false} />
+              <XAxis
+                type="number"
+                domain={[0, 100]}
+                tick={(props) => (
+                  <AxisValueTick
+                    x={props.x}
+                    y={props.y}
+                    payload={props.payload}
+                    mirror={rtl}
+                    suffix="%"
+                  />
+                )}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={148}
+                interval={0}
+                tick={(props) => (
+                  <CategoryTick {...props} mirror={rtl} limit={14} />
+                )}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                wrapperStyle={tooltipMirrorStyle(rtl)}
+                formatter={(value: number, name: string, item) => {
+                  const row = item?.payload as (typeof scores)[number];
+                  if (name === c.averageScore) {
+                    return [
+                      `${Number(value).toFixed(1)}% · ${row.passRate}% ${o.passed} · ${row.title}`,
+                      name,
+                    ];
+                  }
+                  return [value, name];
+                }}
+              />
+              <Bar
+                isAnimationActive={false}
+                dataKey="avgScore"
+                name={c.averageScore}
+                fill={chartColors.violet}
+                maxBarSize={22}
+                radius={[0, 8, 8, 0]}
+              />
+            </BarChart>
+          </MirroredChart>
         </Panel>
       ) : null}
     </>

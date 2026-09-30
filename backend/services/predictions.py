@@ -17,11 +17,17 @@ from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 from repositories.sql_filters import course_org_where
 from services.ai_rules import ATTENDANCE_WATCH, PASS_RATE_THRESHOLD
+from core.locale import Language, entity, txt
 
-SUMMARY_NOTE = (
+SUMMARY_NOTE_EN = (
     "No reliable forecast is available because fewer than 3 yearly averages "
     "are recorded in this scope. This is the real current standing, not a forecast."
 )
+SUMMARY_NOTE_AR = (
+    "لا يتوفر تنبؤ موثوق لأن أقل من 3 متوسطات سنوية مسجّلة في هذا النطاق. "
+    "هذا هو الوضع الحالي الفعلي، وليس تنبؤًا."
+)
+SUMMARY_NOTE = SUMMARY_NOTE_EN
 FORECAST_METHOD = "ols_linear_v1"
 MIN_FORECAST_OBSERVATIONS = 3
 
@@ -45,12 +51,12 @@ def _filter_ids(data: dict[str, Any]) -> tuple[Optional[str], Optional[str]]:
     return getattr(filters, "sector_id", None), getattr(filters, "college_id", None)
 
 
-def comparison_place(role: str, data: dict[str, Any]) -> str:
+def comparison_place(role: str, data: dict[str, Any], language: Language = "en") -> str:
     """Wording for a president view that is already narrowed to a sector."""
     sector_id, college_id = _filter_ids(data)
     if role == "senior_management" and sector_id and not college_id:
-        return "this sector"
-    return "this view"
+        return txt(language, "this sector", "هذا القطاع")
+    return txt(language, "this view", "هذا العرض")
 
 
 def is_university_landing(role: str, data: dict[str, Any]) -> bool:
@@ -64,8 +70,9 @@ def is_university_landing(role: str, data: dict[str, Any]) -> bool:
 
 
 def current_standing_from_context(
-    role: str, ctx_data: dict[str, Any]
+    role: str, ctx_data: dict[str, Any], language: Language = "en"
 ) -> Optional[dict]:
+    summary_note = txt(language, SUMMARY_NOTE_EN, SUMMARY_NOTE_AR)
     if role in ("senior_management", "program_director"):
         overview = ctx_data.get("overview") or {}
         colleges = overview.get("passRateByCollege") or []
@@ -83,48 +90,72 @@ def current_standing_from_context(
             ):
                 return {
                     "kind": "current_standing",
-                    "title": "Current standing · university",
+                    "title": txt(
+                        language,
+                        "Current standing · university",
+                        "الوضع الحالي · الجامعة",
+                    ),
                     "direction": "stable",
-                    "summary": SUMMARY_NOTE,
+                    "summary": summary_note,
                     "rows": [
                         {
-                            "label": "Student pass rate",
+                            "label": txt(
+                                language, "Student pass rate", "معدل نجاح الطلاب"
+                            ),
                             "value": f"{pass_rate}%",
                             "tone": _tone_for(float(pass_rate), PASS_RATE_THRESHOLD),
                         },
                         {
-                            "label": "Attendance",
+                            "label": txt(language, "Attendance", "الحضور"),
                             "value": f"{attendance}%",
                             "tone": _tone_for(float(attendance), ATTENDANCE_WATCH),
                         },
                         {
-                            "label": "Students",
+                            "label": txt(language, "Students", "الطلاب"),
                             "value": str(int(students)),
                             "tone": "iris",
                         },
                     ],
-                    "action": {"label": "Open curriculum view", "to": "/courses"},
+                    "action": {
+                        "label": txt(
+                            language, "Open curriculum view", "فتح عرض المقررات"
+                        ),
+                        "to": "/courses",
+                    },
                 }
         overall = sum(c["passRate"] for c in colleges) / len(colleges)
         ranked = sorted(colleges, key=lambda c: c["passRate"])[:3]
         sector_id, college_id = _filter_ids(ctx_data)
-        title = "Current standing · colleges in scope"
+        title = txt(
+            language,
+            "Current standing · colleges in scope",
+            "الوضع الحالي · الكليات في النطاق",
+        )
         if role == "senior_management" and sector_id and not college_id:
-            title = "Current standing · colleges in this sector"
+            title = txt(
+                language,
+                "Current standing · colleges in this sector",
+                "الوضع الحالي · الكليات في هذا القطاع",
+            )
         return {
             "kind": "current_standing",
             "title": title,
             "direction": "stable",
-            "summary": SUMMARY_NOTE,
+            "summary": summary_note,
             "rows": [
                 {
-                    "label": c["college"],
-                    "value": f"{c['passRate']}% pass",
+                    "label": entity(language, c["college"]),
+                    "value": txt(
+                        language, f"{c['passRate']}% pass", f"{c['passRate']}% نجاح"
+                    ),
                     "tone": _tone_for(c["passRate"], overall),
                 }
                 for c in ranked
             ],
-            "action": {"label": "Open curriculum view", "to": "/courses"},
+            "action": {
+                "label": txt(language, "Open curriculum view", "فتح عرض المقررات"),
+                "to": "/courses",
+            },
         }
 
     if role == "academic_affairs":
@@ -136,18 +167,29 @@ def current_standing_from_context(
         ranked = sorted(curricula, key=lambda c: c["attendance"])[:3]
         return {
             "kind": "current_standing",
-            "title": "Current standing · attendance by curriculum",
+            "title": txt(
+                language,
+                "Current standing · attendance by curriculum",
+                "الوضع الحالي · الحضور حسب المقرر",
+            ),
             "direction": "stable",
-            "summary": SUMMARY_NOTE,
+            "summary": summary_note,
             "rows": [
                 {
                     "label": c["course"],
-                    "value": f"{c['attendance']}% attendance",
+                    "value": txt(
+                        language,
+                        f"{c['attendance']}% attendance",
+                        f"{c['attendance']}% حضور",
+                    ),
                     "tone": _tone_for(c["attendance"], overall),
                 }
                 for c in ranked
             ],
-            "action": {"label": "Open attendance", "to": "/participation"},
+            "action": {
+                "label": txt(language, "Open attendance", "فتح الحضور"),
+                "to": "/participation",
+            },
         }
 
     if role == "professor":
@@ -158,18 +200,29 @@ def current_standing_from_context(
         ranked = sorted(sections, key=lambda s: s["average"])[:3]
         return {
             "kind": "current_standing",
-            "title": "Current standing · your sections",
+            "title": txt(
+                language,
+                "Current standing · your sections",
+                "الوضع الحالي · شعبك",
+            ),
             "direction": "stable",
-            "summary": SUMMARY_NOTE,
+            "summary": summary_note,
             "rows": [
                 {
                     "label": s["section"],
-                    "value": f"{s['average']} avg · {s['passRate']}% pass",
+                    "value": txt(
+                        language,
+                        f"{s['average']} avg · {s['passRate']}% pass",
+                        f"{s['average']} متوسط · {s['passRate']}% نجاح",
+                    ),
                     "tone": _tone_for(s["average"], overall),
                 }
                 for s in ranked
             ],
-            "action": {"label": "Open curriculum view", "to": "/courses"},
+            "action": {
+                "label": txt(language, "Open curriculum view", "فتح عرض المقررات"),
+                "to": "/courses",
+            },
         }
 
     if role == "it_academic_integrity":
@@ -183,13 +236,21 @@ def current_standing_from_context(
         )[:3]
         return {
             "kind": "current_standing",
-            "title": "Current standing · flagged share by exam",
+            "title": txt(
+                language,
+                "Current standing · flagged share by exam",
+                "الوضع الحالي · نسبة المعلّم حسب الامتحان",
+            ),
             "direction": "stable",
-            "summary": SUMMARY_NOTE,
+            "summary": summary_note,
             "rows": [
                 {
                     "label": s["exam"],
-                    "value": f"{s['flagged']}/{s['total']} flagged",
+                    "value": txt(
+                        language,
+                        f"{s['flagged']}/{s['total']} flagged",
+                        f"{s['flagged']}/{s['total']} معلّمة",
+                    ),
                     "tone": (
                         "rose"
                         if s["total"] and s["flagged"] / s["total"] > 0.2
@@ -198,7 +259,10 @@ def current_standing_from_context(
                 }
                 for s in ranked
             ],
-            "action": {"label": "Open live monitoring", "to": "/real-time"},
+            "action": {
+                "label": txt(language, "Open live monitoring", "فتح المراقبة الحية"),
+                "to": "/real-time",
+            },
         }
 
     if role == "student":
@@ -207,9 +271,16 @@ def current_standing_from_context(
         if average is None:
             return None
         class_average = dashboard.get("classAverage")
+        overall = dashboard.get("overallAverage")
+        term = (dashboard.get("termName") or "").strip()
+        semester_label = (
+            txt(language, f"{term} average", f"متوسط {term}")
+            if term
+            else txt(language, "This semester", "هذا الفصل")
+        )
         rows = [
             {
-                "label": "Your average",
+                "label": semester_label,
                 "value": str(average),
                 "tone": (
                     _tone_for(float(average), float(class_average))
@@ -221,18 +292,33 @@ def current_standing_from_context(
         if class_average is not None:
             rows.append(
                 {
-                    "label": "Class average",
+                    "label": txt(language, "Class average", "متوسط الصف"),
                     "value": str(class_average),
+                    "tone": "iris",
+                }
+            )
+        if overall is not None:
+            rows.append(
+                {
+                    "label": txt(language, "All-years average", "متوسط كل السنوات"),
+                    "value": str(overall),
                     "tone": "iris",
                 }
             )
         return {
             "kind": "current_standing",
-            "title": "Current standing · your recorded scores",
+            "title": txt(
+                language,
+                "Current standing · your recorded scores",
+                "الوضع الحالي · درجاتك المسجّلة",
+            ),
             "direction": "stable",
-            "summary": SUMMARY_NOTE,
+            "summary": summary_note,
             "rows": rows,
-            "action": {"label": "Open your record", "to": "/student"},
+            "action": {
+                "label": txt(language, "Open your record", "فتح سجلك"),
+                "to": "/student",
+            },
         }
 
     return None
@@ -370,7 +456,7 @@ async def load_scoped_year_averages(
     ]
 
 
-def _apply_history(result: dict, series: list[dict]) -> dict:
+def _apply_history(result: dict, series: list[dict], language: Language = "en") -> dict:
     forecast = linear_forecast([row["avg"] for row in series])
     if forecast:
         labels = ", ".join(f"{row['label']} {round(row['avg'], 1)}" for row in series)
@@ -381,23 +467,42 @@ def _apply_history(result: dict, series: list[dict]) -> dict:
         result["intervalLow"] = forecast["low"]
         result["intervalHigh"] = forecast["high"]
         result["direction"] = forecast["direction"]
-        result["title"] = "Forecast · next period average"
-        result["summary"] = (
-            f"Recorded yearly averages in this scope are {labels}. "
-            f"A linear projection ({forecast['method']}, {forecast['observations']} observations) "
-            f"estimates the next period at {forecast['value']} "
-            f"(interval {forecast['low']} to {forecast['high']})."
+        result["title"] = txt(
+            language,
+            "Forecast · next period average",
+            "التنبؤ · متوسط الفترة التالية",
+        )
+        result["summary"] = txt(
+            language,
+            (
+                f"Recorded yearly averages in this scope are {labels}. "
+                f"A linear projection ({forecast['method']}, {forecast['observations']} observations) "
+                f"estimates the next period at {forecast['value']} "
+                f"(interval {forecast['low']} to {forecast['high']})."
+            ),
+            (
+                f"المتوسطات السنوية المسجّلة في هذا النطاق هي {labels}. "
+                f"إسقاط خطي ({forecast['method']}، {forecast['observations']} ملاحظات) "
+                f"يقدّر الفترة التالية عند {forecast['value']} "
+                f"(الفترة من {forecast['low']} إلى {forecast['high']})."
+            ),
         )
         result["rows"] = [
             {
                 "label": row["label"],
-                "value": f"{round(row['avg'], 1)} avg",
+                "value": txt(
+                    language,
+                    f"{round(row['avg'], 1)} avg",
+                    f"{round(row['avg'], 1)} متوسط",
+                ),
                 "tone": "iris",
             }
             for row in series
         ] + [
             {
-                "label": "Projected next period",
+                "label": txt(
+                    language, "Projected next period", "الفترة التالية المتوقعة"
+                ),
                 "value": str(forecast["value"]),
                 "tone": "rose" if forecast["direction"] == "falling" else "amber",
             }
@@ -409,9 +514,16 @@ def _apply_history(result: dict, series: list[dict]) -> dict:
             "rising" if delta > 1 else "falling" if delta < -1 else "stable"
         )
         result["kind"] = "current_standing"
-        result["summary"] = (
-            f"Year-over-year average moved {delta:+.1f} points across {len(series)} recorded years. "
-            "Fewer than 3 yearly averages are available, so this is historical standing, not a forecast."
+        result["summary"] = txt(
+            language,
+            (
+                f"Year-over-year average moved {delta:+.1f} points across {len(series)} recorded years. "
+                "Fewer than 3 yearly averages are available, so this is historical standing, not a forecast."
+            ),
+            (
+                f"تحرّك المتوسط السنوي بمقدار {delta:+.1f} نقطة عبر {len(series)} سنوات مسجّلة. "
+                "يتوفر أقل من 3 متوسطات سنوية، لذا هذا وضع تاريخي وليس تنبؤًا."
+            ),
         )
     return result
 
@@ -421,9 +533,10 @@ async def get_standing_or_forecast(
     db: asyncpg.Connection,
     filters: AnalyticsFilters,
     ctx_data: dict[str, Any],
+    language: Language = "en",
 ) -> Optional[dict]:
-    result = current_standing_from_context(ctx.role, ctx_data)
+    result = current_standing_from_context(ctx.role, ctx_data, language=language)
     if result is None:
         return None
     series = await load_scoped_year_averages(db, ctx, filters)
-    return _apply_history(result, series)
+    return _apply_history(result, series, language=language)

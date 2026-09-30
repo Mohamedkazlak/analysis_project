@@ -36,3 +36,7 @@ users.txt
 .DS_Store
 .idea
 .vscode
+backend/eleven_test_ar.mp3
+backend/eleven_test_en.mp3
+backend/models.json
+backend/assets/voices/bnu_voice.wav

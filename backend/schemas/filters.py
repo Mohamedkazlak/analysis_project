@@ -77,6 +77,7 @@ class AiDecisionRequest(BaseModel):
     curriculumId: Optional[str] = None
     studentId: Optional[str] = None
     professorId: Optional[str] = None
+    language: Optional[str] = "en"
 
     def to_filters(self) -> AnalyticsFilters:
         return AnalyticsFilters.from_query(
