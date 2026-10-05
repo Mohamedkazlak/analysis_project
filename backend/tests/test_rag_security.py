@@ -288,7 +288,7 @@ def test_smalltalk_and_unsupported_sql_stay_out_of_the_database():
         assert calls["n"] == 1
         assert hello["text"].startswith("Hi, I'm a chatbot")
         assert weather["text"] == hello["text"]
-        assert arabic["text"].startswith("مرحبًا، أنا مساعد")
+        assert arabic["text"].startswith("مرحباً، أنا المساعد الذكي")
         assert "chatbot" not in arabic["text"].lower()
         db.fetch.assert_not_called()
 

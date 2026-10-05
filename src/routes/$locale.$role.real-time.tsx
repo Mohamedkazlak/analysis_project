@@ -151,7 +151,9 @@ function RealTime() {
         />
       </div>
 
-      {isIntegrity && <AiDecisionSection role="it_academic_integrity" page="real-time" />}
+      {isIntegrity && (
+        <AiDecisionSection role="it_academic_integrity" page="real-time" />
+      )}
       {!isIntegrity && <AiDecisionSection page="real-time" />}
 
       <Panel

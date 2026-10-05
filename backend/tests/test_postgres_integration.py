@@ -425,6 +425,7 @@ def test_migrated_schema_matches_fresh_curriculum_and_org_policy(fresh_db, migra
         "020",
         "021",
         "022",
+        "023",
     ]
     sector_col = asyncio.run(
         _fetch(
@@ -505,6 +506,7 @@ def test_migration_runner_skips_already_applied(migrated_db):
         "skip 022_password_login_without_client_key.sql (already applied)"
         in runner.stdout
     )
+    assert "skip 023_policy_documents.sql (already applied)" in runner.stdout
     assert not any(line.startswith("applied ") for line in runner.stdout.splitlines())
 
 
@@ -767,7 +769,8 @@ def test_migration_010_backfills_unmarked_syn_transc_via_runner():
           ('019', '019_api_key_login_and_rag_audit.sql'),
           ('020', '020_api_keys_allow_rotation.sql'),
           ('021', '021_password_and_api_key_login.sql'),
-          ('022', '022_password_login_without_client_key.sql');
+          ('022', '022_password_login_without_client_key.sql'),
+          ('023', '023_policy_documents.sql');
         """,
     )
     if setup.returncode != 0:
@@ -846,8 +849,9 @@ def test_migration_010_backfills_unmarked_syn_transc_via_runner():
         "020",
         "021",
         "022",
+        "023",
     ]
-    assert recorded[-1]["filename"] == "022_password_login_without_client_key.sql"
+    assert recorded[-1]["filename"] == "023_policy_documents.sql"
 
     _apply_file(url, ROOT / "db" / "migrations" / "010_syn_transc_marker_backfill.sql")
     reapplied = asyncio.run(

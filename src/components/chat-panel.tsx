@@ -78,14 +78,20 @@ function AnalyticalObjectCard({ obj }: { obj: ChatAnalyticalObject }) {
   const chat = messages.chat;
   const data = obj.data || {};
   if (obj.type === "what_if") {
-    const change = (data["estimatedChange"] || {}) as Record<string, any>;
-    const college = change["collegePassRate"];
-    const uni = change["universityPassRate"];
-    const scope = (data["scopeAffected"] || {}) as Record<string, any>;
+    type PassRateDelta = { from?: unknown; to?: unknown; delta?: unknown };
+    const change = (data["estimatedChange"] || {}) as {
+      collegePassRate?: PassRateDelta | null;
+      universityPassRate?: PassRateDelta | null;
+    };
+    const college = change.collegePassRate;
+    const uni = change.universityPassRate;
+    const scope = (data["scopeAffected"] || {}) as {
+      courseParticipants?: unknown;
+    };
     const entity = String(data["entity"] || "");
     const currentValue = data["currentValue"];
     const targetValue = data["targetValue"];
-    const participants = scope["courseParticipants"];
+    const participants = scope.courseParticipants;
     const assumption =
       data["kind"] === "college_pass_uplift"
         ? chat.whatIfAssumptionCollege

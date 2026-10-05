@@ -278,8 +278,29 @@ create table if not exists chat_query_log (
 
 create index if not exists chat_query_log_user_id_idx on chat_query_log (user_id);
 
+-- Bilingual policy corpus for demo (facts stay in SQL; no vector retrieval in this PoC).
+create table if not exists policy_documents (
+  id text primary key,
+  title text not null,
+  language text not null check (language in ('en', 'ar')),
+  body text not null,
+  effective_date date not null,
+  is_synthetic boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists policy_documents_set_updated_at on public.policy_documents;
+create trigger policy_documents_set_updated_at
+  before update on public.policy_documents
+  for each row execute function set_updated_at();
+
+comment on table policy_documents is
+  'Bilingual policy corpus for demo. Facts stay in SQL; no vector retrieval in this PoC.';
+
 alter table api_keys enable row level security;
 alter table chat_query_log enable row level security;
+alter table policy_documents enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Curriculum
@@ -1272,6 +1293,12 @@ create policy transcript_entries_read on transcript_entries
     and student_id in (select current_visible_student_ids())
   );
 
+drop policy if exists policy_documents_read on policy_documents;
+create policy policy_documents_read on policy_documents
+  for select using (
+    (select (current_app_account()).role) is not null
+  );
+
 comment on table org_units is 'University → sector → program tree. scope_id on user_accounts points here. Analytics "college" = program-level row.';
 comment on table courses is 'Catalog curriculum. requirement_level_type is college|university. counted_in_cumulative_gpa / pass_fail_subject drive GPA eligibility and must not be inferred from year_level or course ids.';
 comment on table enrollments is 'A student may sit an exam only through an enrollment on that offering.';
@@ -1575,6 +1602,7 @@ alter table integrity_flags force row level security;
 alter table transcript_entries force row level security;
 alter table api_keys force row level security;
 alter table chat_query_log force row level security;
+alter table policy_documents force row level security;
 
 revoke all on function org_descendants(text) from public;
 revoke all on function current_app_account() from public;

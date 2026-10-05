@@ -123,8 +123,7 @@ export function roleNavigateTarget(
   to: RoleFileRoute;
   params: { locale: Locale; role: string; studentId?: string };
 } {
-  const loc =
-    locale ?? localeFromPathname(dest) ?? readStoredLocale();
+  const loc = locale ?? localeFromPathname(dest) ?? readStoredLocale();
   const parts = stripLocalePrefix(dest).split("/").filter(Boolean);
   const slug = parts[0] ?? ROLE_SLUG.senior_management;
   const second = parts[1];
@@ -174,8 +173,7 @@ export function legacyRedirectTo(
   locale?: Locale,
 ): string | null {
   const parts = pathname.split("/").filter(Boolean);
-  const loc =
-    locale ?? localeFromPathname(pathname) ?? readStoredLocale();
+  const loc = locale ?? localeFromPathname(pathname) ?? readStoredLocale();
 
   if (parts[0] === "login" || (isLocale(parts[0]) && parts[1] === "login")) {
     return null;
