@@ -28,6 +28,7 @@ def make_cache_key(
     term_id: str = "",
     data_version: str = "v1",
     language: str = "en",
+    page: str = "overview",
 ) -> str:
     return "|".join(
         [
@@ -45,6 +46,7 @@ def make_cache_key(
             str(term_id or ""),
             data_version,
             language or "en",
+            page or "overview",
         ]
     )
 

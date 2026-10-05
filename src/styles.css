@@ -17,8 +17,8 @@
   --color-rosee: #be123c;
   --color-ai: #7c3aed;
   --color-canvas: #f4f1fc;
-  --font-display: "Plus Jakarta Sans", "Noto Sans Arabic", ui-sans-serif,
-    sans-serif;
+  --font-display:
+    "Plus Jakarta Sans", "Noto Sans Arabic", ui-sans-serif, sans-serif;
   --font-sans: "Inter", "Noto Sans Arabic", ui-sans-serif, sans-serif;
 }
 
@@ -52,4 +52,89 @@
   border: 1px solid rgba(255, 255, 255, 0.8);
   background-color: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(16px);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes chat-fab-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes chat-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes chat-soft-pulse {
+  0%,
+  100% {
+    box-shadow: 0 12px 28px rgba(124, 58, 237, 0.28);
+  }
+  50% {
+    box-shadow: 0 14px 34px rgba(124, 58, 237, 0.42);
+  }
+}
+
+@utility rise-in {
+  animation: rise-in 0.35s ease-out both;
+}
+
+@utility chat-fab {
+  animation:
+    chat-fab-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both,
+    chat-soft-pulse 2.8s ease-in-out 0.5s infinite;
+}
+
+@utility chat-backdrop {
+  animation: chat-backdrop-in 0.22s ease-out both;
+}
+
+@utility chat-panel-enter {
+  animation: chat-panel-in 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@utility chat-bubble-enter {
+  animation: chat-bubble-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

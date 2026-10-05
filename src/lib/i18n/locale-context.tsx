@@ -7,23 +7,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useRouter, useRouterState } from "@tanstack/react-router";
 import type { Locale, Messages } from "./types";
 import en from "./messages/en";
 import ar from "./messages/ar";
+import {
+  localeFromPathname,
+  readStoredLocale,
+  swapLocaleInPath,
+  writeStoredLocale,
+} from "./locale-path";
 
-const STORAGE_KEY = "bnu.locale";
 const catalogs: Record<Locale, Messages> = { en, ar };
-
-function readStoredLocale(): Locale {
-  if (typeof window === "undefined") return "en";
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw === "ar" || raw === "en") return raw;
-  } catch {
-    /* ignore */
-  }
-  return "en";
-}
 
 function applyDocumentLocale(locale: Locale) {
   if (typeof document === "undefined") return;
@@ -55,36 +50,48 @@ const LocaleContext = createContext<LocaleContextValue>({
   tRole: (r) => r,
 });
 
+function resolveLocale(pathname: string): Locale {
+  return localeFromPathname(pathname) ?? readStoredLocale();
+}
+
 export function LocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => readStoredLocale());
+  const router = useRouter();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [locale, setLocaleState] = useState<Locale>(() =>
+    typeof window === "undefined"
+      ? "en"
+      : resolveLocale(window.location.pathname),
+  );
+
+  // URL is the source of truth when /en or /ar is present.
+  useEffect(() => {
+    const fromPath = localeFromPathname(pathname);
+    if (fromPath) {
+      setLocaleState(fromPath);
+    }
+  }, [pathname]);
 
   useEffect(() => {
     applyDocumentLocale(locale);
-    try {
-      window.localStorage.setItem(STORAGE_KEY, locale);
-    } catch {
-      /* ignore */
-    }
+    writeStoredLocale(locale);
   }, [locale]);
 
-  const setLocale = useCallback((next: Locale) => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
-    window.location.reload();
-  }, []);
+  const setLocale = useCallback(
+    (next: Locale) => {
+      writeStoredLocale(next);
+      const target = swapLocaleInPath(pathname, next);
+      if (target === pathname) {
+        setLocaleState(next);
+        return;
+      }
+      router.history.push(target);
+    },
+    [pathname, router],
+  );
 
   const toggleLocale = useCallback(() => {
-    const next: Locale = locale === "en" ? "ar" : "en";
-    try {
-      window.localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
-    window.location.reload();
-  }, [locale]);
+    setLocale(locale === "en" ? "ar" : "en");
+  }, [locale, setLocale]);
 
   const messages = catalogs[locale];
 

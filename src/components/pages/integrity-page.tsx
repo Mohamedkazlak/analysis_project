@@ -17,7 +17,7 @@ import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { useLocale } from "@/lib/i18n";
 
 export function IntegrityPage() {
-  const { role } = useParams({ from: "/$role" });
+  const { locale: localeParam, role } = useParams({ from: "/$locale/$role" });
   const { locale, messages } = useLocale();
   const ip = messages.integrityPage;
   const c = messages.common;
@@ -57,7 +57,7 @@ export function IntegrityPage() {
         />
       </div>
 
-      <AiDecisionSection />
+      <AiDecisionSection page="integrity" />
 
       <Panel title={ip.workflow}>
         <div className="flex flex-wrap items-center gap-3 text-[13px]">
@@ -73,8 +73,8 @@ export function IntegrityPage() {
             {ip.step3}
           </span>
           <Link
-            to="/$role/real-time"
-            params={{ role }}
+            to="/$locale/$role/real-time"
+            params={{ locale: localeParam, role }}
             search={{}}
             className="ms-auto text-[12px] font-semibold text-iris underline underline-offset-2"
           >

@@ -1,6 +1,7 @@
 import { ApiError, BACKEND_URL } from "../api";
 
 import { clearAuthToken, getAuthToken } from "../auth/token";
+import { isLoginPath, loginPath, readStoredLocale } from "../i18n/locale-path";
 
 function authHeaders(): Record<string, string> {
   const token = getAuthToken();
@@ -17,8 +18,8 @@ function handleUnauthorized(response: Response): void {
 
   clearAuthToken();
 
-  if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-    window.location.href = "/login";
+  if (typeof window !== "undefined" && !isLoginPath(window.location.pathname)) {
+    window.location.href = loginPath(readStoredLocale());
   }
 }
 

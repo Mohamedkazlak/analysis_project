@@ -11,6 +11,7 @@ import {
   roleRouteTo,
   rolesAllowedForPath,
 } from "@/lib/auth/role-guards";
+import { loginPath } from "@/lib/i18n/locale-path";
 import { AnalyticsFilters } from "@/components/dashboard/analytics-filters";
 import {
   useLocale,
@@ -65,18 +66,19 @@ export function AppShell({ children }: { children: ReactNode }) {
     .flatMap((g) => g.items)
     .find((item) => (item.to === "/" ? report === "/" : item.to === report));
   const shownRole = messages.roles[role] ?? displayRole;
+  const routeParams = { locale, role: slug };
 
   // Deep-linking into another role's report sends the user to their own home.
   useEffect(() => {
     const allowed = rolesAllowedForPath(pathname);
     if (allowed && !allowed.includes(role)) {
       void navigate({
-        to: "/$role",
-        params: { role: ROLE_SLUG[role] },
+        to: "/$locale/$role",
+        params: routeParams,
         search: {},
       });
     }
-  }, [navigate, pathname, role]);
+  }, [locale, navigate, pathname, role, slug]);
 
   return (
     <div className="min-h-screen w-full text-ink">
@@ -110,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Link
                     key={item.to}
                     to={roleRouteTo(item.to)}
-                    params={{ role: slug }}
+                    params={routeParams}
                     search={{}}
                     className={cn(
                       "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] transition-colors",
@@ -225,7 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <button
                 onClick={() => {
                   clearAuthToken();
-                  window.location.href = "/login";
+                  window.location.href = loginPath(locale);
                 }}
                 className="flex items-center gap-2 rounded-full border border-white/80 bg-white/70 px-4 py-2 text-[12px] font-semibold text-iris backdrop-blur-xl hover:bg-white"
               >
@@ -253,7 +255,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.to}
                   to={roleRouteTo(item.to)}
-                  params={{ role: slug }}
+                  params={routeParams}
                   search={{}}
                   className="rounded-full border border-white/80 bg-white/70 px-3 py-1.5 text-[12px] font-medium text-ink-soft"
                 >

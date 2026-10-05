@@ -49,10 +49,29 @@ describe("ai-insights combined decision", () => {
         studentId: null,
         professorId: null,
         language: "en",
+        page: "overview",
       },
     });
     expect(result.status).toBe("ok");
     expect(result.prediction?.kind).toBe("current_standing");
+  });
+
+  it("posts the page surface to the combined AI endpoint", async () => {
+    fetchMock.mockResolvedValue({
+      insight: { headline: "x", body: "y", action: null },
+      prediction: null,
+      recommendations: null,
+      status: "ok",
+      page: "courses",
+      pageLabel: "Course performance analysis",
+    });
+    await getAiDecision({ collegeId: "col-a" }, "en", "courses");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      body: {
+        page: "courses",
+        collegeId: "col-a",
+      },
+    });
   });
 
   it("returns a controlled timeout state instead of throwing", async () => {

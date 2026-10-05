@@ -9,15 +9,14 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from core.locale import Language, entity as localize_entity, txt
-from core.utils import PASS_MARK
-
-# Review line for a pass rate. Distinct from the student pass mark.
-PASS_RATE_THRESHOLD = 70.0
-# Medium attendance warning. High severity starts at the lower line.
-ATTENDANCE_THRESHOLD = 80.0
-ATTENDANCE_WATCH = 90.0
-DISCRIMINATION_THRESHOLD = 0.2
-DECLINE_THRESHOLD = 10.0
+from services.ai_thresholds import (
+    ATTENDANCE_THRESHOLD,
+    ATTENDANCE_WATCH,
+    DECLINE_THRESHOLD,
+    DISCRIMINATION_THRESHOLD,
+    PASS_MARK,
+    PASS_RATE_THRESHOLD,
+)
 
 
 def _warning(

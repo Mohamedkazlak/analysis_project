@@ -38,7 +38,7 @@ import {
   tooltipMirrorStyle,
 } from "@/components/dashboard/chart-rtl";
 
-export const Route = createFileRoute("/$role/item-analysis")({
+export const Route = createFileRoute("/$locale/$role/item-analysis")({
   beforeLoad: roleGuard("/item-analysis"),
   head: () => ({
     meta: [
@@ -131,7 +131,7 @@ function ItemAnalysis() {
         />
       </div>
 
-      <AiDecisionSection />
+      <AiDecisionSection page="item-analysis" />
 
       <Panel
         title={ia.correctPerQuestion}

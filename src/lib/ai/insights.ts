@@ -77,6 +77,47 @@ export interface AiDecision {
   message?: string | null;
   /** "pending" while the LLM is still rewording the SQL sentences above. */
   narrationStatus?: "pending" | "done" | "skipped";
+  factPacket?: Record<string, unknown> | null;
+  narrative?: {
+    headline?: string;
+    story?: string;
+    captions?: Record<string, string>;
+    source?: string;
+  } | null;
+  ruleAlerts?: Array<Record<string, unknown>> | null;
+  anomalies?: Array<Record<string, unknown>> | null;
+  impactItems?: Array<{
+    id: string;
+    issue: string;
+    students_affected: number;
+    gap_to_threshold: number;
+    uplift_program: number;
+    uplift_university: number;
+    source: string;
+    rank: number;
+  }> | null;
+  provenance?: {
+    tables: string[];
+    row_counts: Record<string, number>;
+    updated_at: string;
+  } | null;
+  forecastStatus?: {
+    kind: string;
+    message: string;
+    value?: number | null;
+    low?: number | null;
+    high?: number | null;
+    observations?: number;
+    needs_years?: number;
+  } | null;
+  evidenceQuality?: {
+    quality: "strong" | "moderate" | "limited";
+    label: string;
+    score: number;
+    reasons: string[];
+  } | null;
+  page?: string | null;
+  pageLabel?: string | null;
 }
 
 export const AI_REQUEST_TIMEOUT_MS = 12000;
@@ -84,6 +125,7 @@ export const AI_REQUEST_TIMEOUT_MS = 12000;
 export async function getAiDecision(
   filters: AnalyticsFilters,
   language: "en" | "ar" = "en",
+  page: string = "overview",
 ): Promise<AiDecision> {
   try {
     return await fetchFromBackend<AiDecision>("/api/ai/decision", {
@@ -94,7 +136,11 @@ export async function getAiDecision(
         curriculumId: filters.curriculumId ?? null,
         studentId: filters.studentId ?? null,
         professorId: filters.professorId ?? null,
+        academicYearId:
+          (filters as { academicYearId?: string }).academicYearId ?? null,
+        termId: (filters as { termId?: string }).termId ?? null,
         language,
+        page,
       },
       timeoutMs: AI_REQUEST_TIMEOUT_MS,
     });
@@ -110,6 +156,7 @@ export async function getAiDecision(
         : "AI analysis is temporarily unavailable.",
       dataStatus: "insufficient",
       narrationStatus: "skipped",
+      page,
     };
   }
 }

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { getStudentDirectory } from "@/lib/api";
+import { AiDecisionSection } from "@/components/ai-insights";
 import { openChat } from "@/lib/chat-bus";
 import { useRole } from "@/components/role-context";
 import {
@@ -23,7 +24,7 @@ import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import { useLocale, translateOrgName, translateStanding } from "@/lib/i18n";
 import { roleGuard } from "@/lib/auth/role-guards";
 
-export const Route = createFileRoute("/$role/students/")({
+export const Route = createFileRoute("/$locale/$role/students/")({
   beforeLoad: roleGuard("/students"),
   head: () => ({
     meta: [
@@ -52,7 +53,7 @@ export const Route = createFileRoute("/$role/students/")({
  * The same check runs in FastAPI and in the row-level policy.
  */
 function StudentDirectory() {
-  const { role: roleParam } = Route.useParams();
+  const { locale: localeParam, role: roleParam } = Route.useParams();
   const { role } = useRole();
   const { locale, messages } = useLocale();
   const c = messages.common;
@@ -102,6 +103,7 @@ function StudentDirectory() {
   return (
     <>
       <ScopeBanner />
+      <AiDecisionSection page="students" />
 
       <div className="flex justify-end">
         <button
@@ -226,8 +228,12 @@ function StudentDirectory() {
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <Link
-                    to="/$role/students/$studentId"
-                    params={{ role: roleParam, studentId: r.studentId }}
+                    to="/$locale/$role/students/$studentId"
+                    params={{
+                      locale: localeParam,
+                      role: roleParam,
+                      studentId: r.studentId,
+                    }}
                     search={{}}
                     className="text-[12px] font-semibold text-iris hover:underline"
                   >

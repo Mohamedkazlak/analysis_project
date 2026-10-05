@@ -7,7 +7,7 @@ import { IntegrityPage } from "@/components/pages/integrity-page";
 import { roleGuard } from "@/lib/auth/role-guards";
 import { useRole } from "@/components/role-context";
 
-export const Route = createFileRoute("/$role/")({
+export const Route = createFileRoute("/$locale/$role/")({
   beforeLoad: roleGuard("/"),
   head: () => ({
     meta: [

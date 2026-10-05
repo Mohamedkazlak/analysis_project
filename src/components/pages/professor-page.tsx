@@ -59,7 +59,7 @@ export function ProfessorPage() {
         />
       </div>
 
-      <AiDecisionSection role="professor" />
+      <AiDecisionSection role="professor" page="overview" />
 
       <Panel title="Gradebook · my courses">
         <TableShell>

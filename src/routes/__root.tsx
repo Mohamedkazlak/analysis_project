@@ -21,6 +21,7 @@ import {
   legacyRedirectTo,
   roleNavigateTarget,
 } from "@/lib/auth/role-guards";
+import { isLoginPath, readStoredLocale } from "@/lib/i18n/locale-path";
 import { FILTER_SEARCH_DEFAULTS, fromSearchParams } from "@/lib/filter-types";
 
 function NotFoundComponent() {
@@ -39,7 +40,7 @@ function NotFoundComponent() {
             to="/"
             className="inline-flex items-center justify-center rounded-full bg-iris px-4 py-2 text-[12px] font-semibold text-white"
           >
-            Back to overview
+            Back to home
           </Link>
         </div>
       </div>
@@ -90,17 +91,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       middlewares: [stripSearchParams(FILTER_SEARCH_DEFAULTS)],
     },
     beforeLoad: async ({ location }) => {
-      if (location.pathname === "/login") return;
+      if (isLoginPath(location.pathname)) return;
       // localStorage is only available in the browser. Skip on SSR so a
       // successful login is not bounced back to /login during hydration.
       if (typeof window === "undefined") return;
+      const locale = readStoredLocale();
       const role = await ensureActiveRole();
       if (!role) {
-        throw redirect({ to: "/login" });
+        throw redirect({
+          to: "/$locale/login",
+          params: { locale },
+        });
       }
-      const dest = legacyRedirectTo(location.pathname, role);
+      const dest = legacyRedirectTo(location.pathname, role, locale);
       if (dest) {
-        throw redirect({ ...roleNavigateTarget(dest), search: {} });
+        throw redirect({
+          ...roleNavigateTarget(dest, locale),
+          search: {},
+        });
       }
     },
     head: () => ({
@@ -155,7 +163,7 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
-  const isLogin = router.state.location.pathname === "/login";
+  const isLogin = isLoginPath(router.state.location.pathname);
 
   return (
     <QueryClientProvider client={queryClient}>

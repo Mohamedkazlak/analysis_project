@@ -4,6 +4,8 @@ export interface AnalyticsFilters {
   curriculumId?: string | undefined;
   studentId?: string | undefined;
   professorId?: string | undefined;
+  academicYearId?: string | undefined;
+  termId?: string | undefined;
 }
 
 export interface FilterOption {
@@ -47,6 +49,8 @@ export const FILTER_SEARCH_KEYS = [
   "curriculumId",
   "studentId",
   "professorId",
+  "academicYearId",
+  "termId",
 ] as const satisfies ReadonlyArray<keyof AnalyticsFilters>;
 
 export const FILTER_SEARCH_DEFAULTS: AnalyticsFilters = {
@@ -55,6 +59,8 @@ export const FILTER_SEARCH_DEFAULTS: AnalyticsFilters = {
   curriculumId: undefined,
   studentId: undefined,
   professorId: undefined,
+  academicYearId: undefined,
+  termId: undefined,
 };
 
 function searchValue(value: unknown): string | undefined {

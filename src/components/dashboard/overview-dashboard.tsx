@@ -746,7 +746,7 @@ export function OverviewDashboard({
         </div>
 
         <AiInsight>{data.insight}</AiInsight>
-        <AiDecisionSection role={role} />
+        <AiDecisionSection role={role} page="overview" />
 
         <FilterBar>
           <Select
@@ -796,7 +796,7 @@ export function OverviewDashboard({
         ))}
       </div>
 
-      <AiDecisionSection role={role} />
+      <AiDecisionSection role={role} page="overview" />
 
       {showColleges && (
         <Panel title={o.passRateByCollege}>

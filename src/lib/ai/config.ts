@@ -36,3 +36,31 @@ export const aiConfig: {
     student: false,
   },
 };
+
+/** Dashboard surfaces that request page-local AI analysis. */
+export type AiPage =
+  | "overview"
+  | "courses"
+  | "exam-activity"
+  | "performance"
+  | "participation"
+  | "item-analysis"
+  | "integrity"
+  | "real-time"
+  | "students"
+  | "student"
+  | "my-progress";
+
+export const AI_PAGE_LABELS: Record<AiPage, string> = {
+  overview: "Overview analysis",
+  courses: "Course performance analysis",
+  "exam-activity": "Exam activity analysis",
+  performance: "Student performance analysis",
+  participation: "Participation analysis",
+  "item-analysis": "Item analysis",
+  integrity: "Integrity analysis",
+  "real-time": "Live monitoring analysis",
+  students: "Student directory analysis",
+  student: "Student analysis",
+  "my-progress": "My progress analysis",
+};

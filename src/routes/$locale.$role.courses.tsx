@@ -32,7 +32,7 @@ import {
   type StandingFilter,
 } from "@/components/dashboard/course-performance";
 
-export const Route = createFileRoute("/$role/courses")({
+export const Route = createFileRoute("/$locale/$role/courses")({
   beforeLoad: roleGuard("/courses"),
   head: () => ({
     meta: [
@@ -146,7 +146,7 @@ function CoursePerformance() {
         />
       </div>
 
-      <AiDecisionSection />
+      <AiDecisionSection page="courses" />
 
       <Panel
         title={cp.sectionComparison}

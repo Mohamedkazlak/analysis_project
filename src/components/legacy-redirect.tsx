@@ -5,19 +5,21 @@ import {
   getActiveDemoRole,
   roleRouteTo,
 } from "@/lib/auth/role-guards";
+import { loginPath, readStoredLocale } from "@/lib/i18n/locale-path";
 
 export function LegacyRedirect({ leaf }: { leaf: string }) {
   const navigate = useNavigate();
 
   useLayoutEffect(() => {
+    const locale = readStoredLocale();
     const role = getActiveDemoRole();
     if (!role) {
-      window.location.href = "/login";
+      window.location.href = loginPath(locale);
       return;
     }
     void navigate({
       to: roleRouteTo(leaf),
-      params: { role: ROLE_SLUG[role] },
+      params: { locale, role: ROLE_SLUG[role] },
       search: {},
       replace: true,
     });
@@ -31,15 +33,16 @@ export function LegacyStudentRedirect() {
   const { studentId } = useParams({ strict: false });
 
   useLayoutEffect(() => {
+    const locale = readStoredLocale();
     const role = getActiveDemoRole();
     if (!role) {
-      window.location.href = "/login";
+      window.location.href = loginPath(locale);
       return;
     }
     if (!studentId) return;
     void navigate({
-      to: "/$role/students/$studentId",
-      params: { role: ROLE_SLUG[role], studentId },
+      to: "/$locale/$role/students/$studentId",
+      params: { locale, role: ROLE_SLUG[role], studentId },
       search: {},
       replace: true,
     });

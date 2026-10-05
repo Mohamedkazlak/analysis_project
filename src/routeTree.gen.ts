@@ -10,7 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as RoleRouteImport } from './routes/$role'
+import { Route as LocaleRouteImport } from './routes/$locale'
 import { Route as CoursesRouteImport } from './routes/courses'
 import { Route as ExamActivityRouteImport } from './routes/exam-activity'
 import { Route as IntegrityRouteImport } from './routes/integrity'
@@ -21,27 +21,29 @@ import { Route as MyProgressRouteImport } from './routes/my-progress'
 import { Route as ParticipationRouteImport } from './routes/participation'
 import { Route as PerformanceRouteImport } from './routes/performance'
 import { Route as RealTimeRouteImport } from './routes/real-time'
-import { Route as RoleIndexRouteImport } from './routes/$role.index'
-import { Route as RoleCoursesRouteImport } from './routes/$role.courses'
-import { Route as RoleExamActivityRouteImport } from './routes/$role.exam-activity'
-import { Route as RoleIntegrityRouteImport } from './routes/$role.integrity'
-import { Route as RoleItemAnalysisRouteImport } from './routes/$role.item-analysis'
-import { Route as RoleParticipationRouteImport } from './routes/$role.participation'
-import { Route as RolePerformanceRouteImport } from './routes/$role.performance'
-import { Route as RoleRealTimeRouteImport } from './routes/$role.real-time'
+import { Route as LocaleRoleRouteImport } from './routes/$locale.$role'
+import { Route as LocaleLoginRouteImport } from './routes/$locale.login'
 import { Route as StudentsIndexRouteImport } from './routes/students.index'
 import { Route as StudentsStudentIdRouteImport } from './routes/students.$studentId'
-import { Route as RoleStudentsIndexRouteImport } from './routes/$role.students.index'
-import { Route as RoleStudentsStudentIdRouteImport } from './routes/$role.students.$studentId'
+import { Route as LocaleRoleIndexRouteImport } from './routes/$locale.$role.index'
+import { Route as LocaleRoleCoursesRouteImport } from './routes/$locale.$role.courses'
+import { Route as LocaleRoleExamActivityRouteImport } from './routes/$locale.$role.exam-activity'
+import { Route as LocaleRoleIntegrityRouteImport } from './routes/$locale.$role.integrity'
+import { Route as LocaleRoleItemAnalysisRouteImport } from './routes/$locale.$role.item-analysis'
+import { Route as LocaleRoleParticipationRouteImport } from './routes/$locale.$role.participation'
+import { Route as LocaleRolePerformanceRouteImport } from './routes/$locale.$role.performance'
+import { Route as LocaleRoleRealTimeRouteImport } from './routes/$locale.$role.real-time'
+import { Route as LocaleRoleStudentsIndexRouteImport } from './routes/$locale.$role.students.index'
+import { Route as LocaleRoleStudentsStudentIdRouteImport } from './routes/$locale.$role.students.$studentId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoleRoute = RoleRouteImport.update({
-  id: '/$role',
-  path: '/$role',
+const LocaleRoute = LocaleRouteImport.update({
+  id: '/$locale',
+  path: '/$locale',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CoursesRoute = CoursesRouteImport.update({
@@ -94,45 +96,15 @@ const RealTimeRoute = RealTimeRouteImport.update({
   path: '/real-time',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoleIndexRoute = RoleIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => RoleRoute,
+const LocaleRoleRoute = LocaleRoleRouteImport.update({
+  id: '/$role',
+  path: '/$role',
+  getParentRoute: () => LocaleRoute,
 } as any)
-const RoleCoursesRoute = RoleCoursesRouteImport.update({
-  id: '/courses',
-  path: '/courses',
-  getParentRoute: () => RoleRoute,
-} as any)
-const RoleExamActivityRoute = RoleExamActivityRouteImport.update({
-  id: '/exam-activity',
-  path: '/exam-activity',
-  getParentRoute: () => RoleRoute,
-} as any)
-const RoleIntegrityRoute = RoleIntegrityRouteImport.update({
-  id: '/integrity',
-  path: '/integrity',
-  getParentRoute: () => RoleRoute,
-} as any)
-const RoleItemAnalysisRoute = RoleItemAnalysisRouteImport.update({
-  id: '/item-analysis',
-  path: '/item-analysis',
-  getParentRoute: () => RoleRoute,
-} as any)
-const RoleParticipationRoute = RoleParticipationRouteImport.update({
-  id: '/participation',
-  path: '/participation',
-  getParentRoute: () => RoleRoute,
-} as any)
-const RolePerformanceRoute = RolePerformanceRouteImport.update({
-  id: '/performance',
-  path: '/performance',
-  getParentRoute: () => RoleRoute,
-} as any)
-const RoleRealTimeRoute = RoleRealTimeRouteImport.update({
-  id: '/real-time',
-  path: '/real-time',
-  getParentRoute: () => RoleRoute,
+const LocaleLoginRoute = LocaleLoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => LocaleRoute,
 } as any)
 const StudentsIndexRoute = StudentsIndexRouteImport.update({
   id: '/students/',
@@ -144,20 +116,61 @@ const StudentsStudentIdRoute = StudentsStudentIdRouteImport.update({
   path: '/students/$studentId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RoleStudentsIndexRoute = RoleStudentsIndexRouteImport.update({
+const LocaleRoleIndexRoute = LocaleRoleIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleCoursesRoute = LocaleRoleCoursesRouteImport.update({
+  id: '/courses',
+  path: '/courses',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleExamActivityRoute = LocaleRoleExamActivityRouteImport.update({
+  id: '/exam-activity',
+  path: '/exam-activity',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleIntegrityRoute = LocaleRoleIntegrityRouteImport.update({
+  id: '/integrity',
+  path: '/integrity',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleItemAnalysisRoute = LocaleRoleItemAnalysisRouteImport.update({
+  id: '/item-analysis',
+  path: '/item-analysis',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleParticipationRoute = LocaleRoleParticipationRouteImport.update({
+  id: '/participation',
+  path: '/participation',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRolePerformanceRoute = LocaleRolePerformanceRouteImport.update({
+  id: '/performance',
+  path: '/performance',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleRealTimeRoute = LocaleRoleRealTimeRouteImport.update({
+  id: '/real-time',
+  path: '/real-time',
+  getParentRoute: () => LocaleRoleRoute,
+} as any)
+const LocaleRoleStudentsIndexRoute = LocaleRoleStudentsIndexRouteImport.update({
   id: '/students/',
   path: '/students/',
-  getParentRoute: () => RoleRoute,
+  getParentRoute: () => LocaleRoleRoute,
 } as any)
-const RoleStudentsStudentIdRoute = RoleStudentsStudentIdRouteImport.update({
-  id: '/students/$studentId',
-  path: '/students/$studentId',
-  getParentRoute: () => RoleRoute,
-} as any)
+const LocaleRoleStudentsStudentIdRoute =
+  LocaleRoleStudentsStudentIdRouteImport.update({
+    id: '/students/$studentId',
+    path: '/students/$studentId',
+    getParentRoute: () => LocaleRoleRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/$role': typeof RoleRouteWithChildren
+  '/$locale': typeof LocaleRouteWithChildren
   '/courses': typeof CoursesRoute
   '/exam-activity': typeof ExamActivityRoute
   '/integrity': typeof IntegrityRoute
@@ -168,21 +181,24 @@ export interface FileRoutesByFullPath {
   '/participation': typeof ParticipationRoute
   '/performance': typeof PerformanceRoute
   '/real-time': typeof RealTimeRoute
-  '/$role/courses': typeof RoleCoursesRoute
-  '/$role/exam-activity': typeof RoleExamActivityRoute
-  '/$role/integrity': typeof RoleIntegrityRoute
-  '/$role/item-analysis': typeof RoleItemAnalysisRoute
-  '/$role/participation': typeof RoleParticipationRoute
-  '/$role/performance': typeof RolePerformanceRoute
-  '/$role/real-time': typeof RoleRealTimeRoute
+  '/$locale/$role': typeof LocaleRoleRouteWithChildren
+  '/$locale/login': typeof LocaleLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
-  '/$role/': typeof RoleIndexRoute
   '/students/': typeof StudentsIndexRoute
-  '/$role/students/$studentId': typeof RoleStudentsStudentIdRoute
-  '/$role/students/': typeof RoleStudentsIndexRoute
+  '/$locale/$role/courses': typeof LocaleRoleCoursesRoute
+  '/$locale/$role/exam-activity': typeof LocaleRoleExamActivityRoute
+  '/$locale/$role/integrity': typeof LocaleRoleIntegrityRoute
+  '/$locale/$role/item-analysis': typeof LocaleRoleItemAnalysisRoute
+  '/$locale/$role/participation': typeof LocaleRoleParticipationRoute
+  '/$locale/$role/performance': typeof LocaleRolePerformanceRoute
+  '/$locale/$role/real-time': typeof LocaleRoleRealTimeRoute
+  '/$locale/$role/': typeof LocaleRoleIndexRoute
+  '/$locale/$role/students/$studentId': typeof LocaleRoleStudentsStudentIdRoute
+  '/$locale/$role/students/': typeof LocaleRoleStudentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/$locale': typeof LocaleRouteWithChildren
   '/courses': typeof CoursesRoute
   '/exam-activity': typeof ExamActivityRoute
   '/integrity': typeof IntegrityRoute
@@ -193,23 +209,24 @@ export interface FileRoutesByTo {
   '/participation': typeof ParticipationRoute
   '/performance': typeof PerformanceRoute
   '/real-time': typeof RealTimeRoute
-  '/$role/courses': typeof RoleCoursesRoute
-  '/$role/exam-activity': typeof RoleExamActivityRoute
-  '/$role/integrity': typeof RoleIntegrityRoute
-  '/$role/item-analysis': typeof RoleItemAnalysisRoute
-  '/$role/participation': typeof RoleParticipationRoute
-  '/$role/performance': typeof RolePerformanceRoute
-  '/$role/real-time': typeof RoleRealTimeRoute
+  '/$locale/login': typeof LocaleLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
-  '/$role': typeof RoleIndexRoute
   '/students': typeof StudentsIndexRoute
-  '/$role/students/$studentId': typeof RoleStudentsStudentIdRoute
-  '/$role/students': typeof RoleStudentsIndexRoute
+  '/$locale/$role/courses': typeof LocaleRoleCoursesRoute
+  '/$locale/$role/exam-activity': typeof LocaleRoleExamActivityRoute
+  '/$locale/$role/integrity': typeof LocaleRoleIntegrityRoute
+  '/$locale/$role/item-analysis': typeof LocaleRoleItemAnalysisRoute
+  '/$locale/$role/participation': typeof LocaleRoleParticipationRoute
+  '/$locale/$role/performance': typeof LocaleRolePerformanceRoute
+  '/$locale/$role/real-time': typeof LocaleRoleRealTimeRoute
+  '/$locale/$role': typeof LocaleRoleIndexRoute
+  '/$locale/$role/students/$studentId': typeof LocaleRoleStudentsStudentIdRoute
+  '/$locale/$role/students': typeof LocaleRoleStudentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/$role': typeof RoleRouteWithChildren
+  '/$locale': typeof LocaleRouteWithChildren
   '/courses': typeof CoursesRoute
   '/exam-activity': typeof ExamActivityRoute
   '/integrity': typeof IntegrityRoute
@@ -220,24 +237,26 @@ export interface FileRoutesById {
   '/participation': typeof ParticipationRoute
   '/performance': typeof PerformanceRoute
   '/real-time': typeof RealTimeRoute
-  '/$role/courses': typeof RoleCoursesRoute
-  '/$role/exam-activity': typeof RoleExamActivityRoute
-  '/$role/integrity': typeof RoleIntegrityRoute
-  '/$role/item-analysis': typeof RoleItemAnalysisRoute
-  '/$role/participation': typeof RoleParticipationRoute
-  '/$role/performance': typeof RolePerformanceRoute
-  '/$role/real-time': typeof RoleRealTimeRoute
+  '/$locale/$role': typeof LocaleRoleRouteWithChildren
+  '/$locale/login': typeof LocaleLoginRoute
   '/students/$studentId': typeof StudentsStudentIdRoute
-  '/$role/': typeof RoleIndexRoute
   '/students/': typeof StudentsIndexRoute
-  '/$role/students/$studentId': typeof RoleStudentsStudentIdRoute
-  '/$role/students/': typeof RoleStudentsIndexRoute
+  '/$locale/$role/courses': typeof LocaleRoleCoursesRoute
+  '/$locale/$role/exam-activity': typeof LocaleRoleExamActivityRoute
+  '/$locale/$role/integrity': typeof LocaleRoleIntegrityRoute
+  '/$locale/$role/item-analysis': typeof LocaleRoleItemAnalysisRoute
+  '/$locale/$role/participation': typeof LocaleRoleParticipationRoute
+  '/$locale/$role/performance': typeof LocaleRolePerformanceRoute
+  '/$locale/$role/real-time': typeof LocaleRoleRealTimeRoute
+  '/$locale/$role/': typeof LocaleRoleIndexRoute
+  '/$locale/$role/students/$studentId': typeof LocaleRoleStudentsStudentIdRoute
+  '/$locale/$role/students/': typeof LocaleRoleStudentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/$role'
+    | '/$locale'
     | '/courses'
     | '/exam-activity'
     | '/integrity'
@@ -248,21 +267,24 @@ export interface FileRouteTypes {
     | '/participation'
     | '/performance'
     | '/real-time'
-    | '/$role/courses'
-    | '/$role/exam-activity'
-    | '/$role/integrity'
-    | '/$role/item-analysis'
-    | '/$role/participation'
-    | '/$role/performance'
-    | '/$role/real-time'
+    | '/$locale/$role'
+    | '/$locale/login'
     | '/students/$studentId'
-    | '/$role/'
     | '/students/'
-    | '/$role/students/$studentId'
-    | '/$role/students/'
+    | '/$locale/$role/courses'
+    | '/$locale/$role/exam-activity'
+    | '/$locale/$role/integrity'
+    | '/$locale/$role/item-analysis'
+    | '/$locale/$role/participation'
+    | '/$locale/$role/performance'
+    | '/$locale/$role/real-time'
+    | '/$locale/$role/'
+    | '/$locale/$role/students/$studentId'
+    | '/$locale/$role/students/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/$locale'
     | '/courses'
     | '/exam-activity'
     | '/integrity'
@@ -273,22 +295,23 @@ export interface FileRouteTypes {
     | '/participation'
     | '/performance'
     | '/real-time'
-    | '/$role/courses'
-    | '/$role/exam-activity'
-    | '/$role/integrity'
-    | '/$role/item-analysis'
-    | '/$role/participation'
-    | '/$role/performance'
-    | '/$role/real-time'
+    | '/$locale/login'
     | '/students/$studentId'
-    | '/$role'
     | '/students'
-    | '/$role/students/$studentId'
-    | '/$role/students'
+    | '/$locale/$role/courses'
+    | '/$locale/$role/exam-activity'
+    | '/$locale/$role/integrity'
+    | '/$locale/$role/item-analysis'
+    | '/$locale/$role/participation'
+    | '/$locale/$role/performance'
+    | '/$locale/$role/real-time'
+    | '/$locale/$role'
+    | '/$locale/$role/students/$studentId'
+    | '/$locale/$role/students'
   id:
     | '__root__'
     | '/'
-    | '/$role'
+    | '/$locale'
     | '/courses'
     | '/exam-activity'
     | '/integrity'
@@ -299,23 +322,25 @@ export interface FileRouteTypes {
     | '/participation'
     | '/performance'
     | '/real-time'
-    | '/$role/courses'
-    | '/$role/exam-activity'
-    | '/$role/integrity'
-    | '/$role/item-analysis'
-    | '/$role/participation'
-    | '/$role/performance'
-    | '/$role/real-time'
+    | '/$locale/$role'
+    | '/$locale/login'
     | '/students/$studentId'
-    | '/$role/'
     | '/students/'
-    | '/$role/students/$studentId'
-    | '/$role/students/'
+    | '/$locale/$role/courses'
+    | '/$locale/$role/exam-activity'
+    | '/$locale/$role/integrity'
+    | '/$locale/$role/item-analysis'
+    | '/$locale/$role/participation'
+    | '/$locale/$role/performance'
+    | '/$locale/$role/real-time'
+    | '/$locale/$role/'
+    | '/$locale/$role/students/$studentId'
+    | '/$locale/$role/students/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  RoleRoute: typeof RoleRouteWithChildren
+  LocaleRoute: typeof LocaleRouteWithChildren
   CoursesRoute: typeof CoursesRoute
   ExamActivityRoute: typeof ExamActivityRoute
   IntegrityRoute: typeof IntegrityRoute
@@ -339,11 +364,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$role': {
-      id: '/$role'
-      path: '/$role'
-      fullPath: '/$role'
-      preLoaderRoute: typeof RoleRouteImport
+    '/$locale': {
+      id: '/$locale'
+      path: '/$locale'
+      fullPath: '/$locale'
+      preLoaderRoute: typeof LocaleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/courses': {
@@ -416,61 +441,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RealTimeRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$role/': {
-      id: '/$role/'
-      path: '/'
-      fullPath: '/$role/'
-      preLoaderRoute: typeof RoleIndexRouteImport
-      parentRoute: typeof RoleRoute
+    '/$locale/$role': {
+      id: '/$locale/$role'
+      path: '/$role'
+      fullPath: '/$locale/$role'
+      preLoaderRoute: typeof LocaleRoleRouteImport
+      parentRoute: typeof LocaleRoute
     }
-    '/$role/courses': {
-      id: '/$role/courses'
-      path: '/courses'
-      fullPath: '/$role/courses'
-      preLoaderRoute: typeof RoleCoursesRouteImport
-      parentRoute: typeof RoleRoute
-    }
-    '/$role/exam-activity': {
-      id: '/$role/exam-activity'
-      path: '/exam-activity'
-      fullPath: '/$role/exam-activity'
-      preLoaderRoute: typeof RoleExamActivityRouteImport
-      parentRoute: typeof RoleRoute
-    }
-    '/$role/integrity': {
-      id: '/$role/integrity'
-      path: '/integrity'
-      fullPath: '/$role/integrity'
-      preLoaderRoute: typeof RoleIntegrityRouteImport
-      parentRoute: typeof RoleRoute
-    }
-    '/$role/item-analysis': {
-      id: '/$role/item-analysis'
-      path: '/item-analysis'
-      fullPath: '/$role/item-analysis'
-      preLoaderRoute: typeof RoleItemAnalysisRouteImport
-      parentRoute: typeof RoleRoute
-    }
-    '/$role/participation': {
-      id: '/$role/participation'
-      path: '/participation'
-      fullPath: '/$role/participation'
-      preLoaderRoute: typeof RoleParticipationRouteImport
-      parentRoute: typeof RoleRoute
-    }
-    '/$role/performance': {
-      id: '/$role/performance'
-      path: '/performance'
-      fullPath: '/$role/performance'
-      preLoaderRoute: typeof RolePerformanceRouteImport
-      parentRoute: typeof RoleRoute
-    }
-    '/$role/real-time': {
-      id: '/$role/real-time'
-      path: '/real-time'
-      fullPath: '/$role/real-time'
-      preLoaderRoute: typeof RoleRealTimeRouteImport
-      parentRoute: typeof RoleRoute
+    '/$locale/login': {
+      id: '/$locale/login'
+      path: '/login'
+      fullPath: '/$locale/login'
+      preLoaderRoute: typeof LocaleLoginRouteImport
+      parentRoute: typeof LocaleRoute
     }
     '/students/': {
       id: '/students/'
@@ -486,54 +469,125 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof StudentsStudentIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/$role/students/': {
-      id: '/$role/students/'
-      path: '/students'
-      fullPath: '/$role/students/'
-      preLoaderRoute: typeof RoleStudentsIndexRouteImport
-      parentRoute: typeof RoleRoute
+    '/$locale/$role/': {
+      id: '/$locale/$role/'
+      path: '/'
+      fullPath: '/$locale/$role/'
+      preLoaderRoute: typeof LocaleRoleIndexRouteImport
+      parentRoute: typeof LocaleRoleRoute
     }
-    '/$role/students/$studentId': {
-      id: '/$role/students/$studentId'
+    '/$locale/$role/courses': {
+      id: '/$locale/$role/courses'
+      path: '/courses'
+      fullPath: '/$locale/$role/courses'
+      preLoaderRoute: typeof LocaleRoleCoursesRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/exam-activity': {
+      id: '/$locale/$role/exam-activity'
+      path: '/exam-activity'
+      fullPath: '/$locale/$role/exam-activity'
+      preLoaderRoute: typeof LocaleRoleExamActivityRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/integrity': {
+      id: '/$locale/$role/integrity'
+      path: '/integrity'
+      fullPath: '/$locale/$role/integrity'
+      preLoaderRoute: typeof LocaleRoleIntegrityRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/item-analysis': {
+      id: '/$locale/$role/item-analysis'
+      path: '/item-analysis'
+      fullPath: '/$locale/$role/item-analysis'
+      preLoaderRoute: typeof LocaleRoleItemAnalysisRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/participation': {
+      id: '/$locale/$role/participation'
+      path: '/participation'
+      fullPath: '/$locale/$role/participation'
+      preLoaderRoute: typeof LocaleRoleParticipationRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/performance': {
+      id: '/$locale/$role/performance'
+      path: '/performance'
+      fullPath: '/$locale/$role/performance'
+      preLoaderRoute: typeof LocaleRolePerformanceRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/real-time': {
+      id: '/$locale/$role/real-time'
+      path: '/real-time'
+      fullPath: '/$locale/$role/real-time'
+      preLoaderRoute: typeof LocaleRoleRealTimeRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/students/': {
+      id: '/$locale/$role/students/'
+      path: '/students'
+      fullPath: '/$locale/$role/students/'
+      preLoaderRoute: typeof LocaleRoleStudentsIndexRouteImport
+      parentRoute: typeof LocaleRoleRoute
+    }
+    '/$locale/$role/students/$studentId': {
+      id: '/$locale/$role/students/$studentId'
       path: '/students/$studentId'
-      fullPath: '/$role/students/$studentId'
-      preLoaderRoute: typeof RoleStudentsStudentIdRouteImport
-      parentRoute: typeof RoleRoute
+      fullPath: '/$locale/$role/students/$studentId'
+      preLoaderRoute: typeof LocaleRoleStudentsStudentIdRouteImport
+      parentRoute: typeof LocaleRoleRoute
     }
   }
 }
 
-interface RoleRouteChildren {
-  RoleCoursesRoute: typeof RoleCoursesRoute
-  RoleExamActivityRoute: typeof RoleExamActivityRoute
-  RoleIntegrityRoute: typeof RoleIntegrityRoute
-  RoleItemAnalysisRoute: typeof RoleItemAnalysisRoute
-  RoleParticipationRoute: typeof RoleParticipationRoute
-  RolePerformanceRoute: typeof RolePerformanceRoute
-  RoleRealTimeRoute: typeof RoleRealTimeRoute
-  RoleIndexRoute: typeof RoleIndexRoute
-  RoleStudentsStudentIdRoute: typeof RoleStudentsStudentIdRoute
-  RoleStudentsIndexRoute: typeof RoleStudentsIndexRoute
+interface LocaleRoleRouteChildren {
+  LocaleRoleCoursesRoute: typeof LocaleRoleCoursesRoute
+  LocaleRoleExamActivityRoute: typeof LocaleRoleExamActivityRoute
+  LocaleRoleIntegrityRoute: typeof LocaleRoleIntegrityRoute
+  LocaleRoleItemAnalysisRoute: typeof LocaleRoleItemAnalysisRoute
+  LocaleRoleParticipationRoute: typeof LocaleRoleParticipationRoute
+  LocaleRolePerformanceRoute: typeof LocaleRolePerformanceRoute
+  LocaleRoleRealTimeRoute: typeof LocaleRoleRealTimeRoute
+  LocaleRoleIndexRoute: typeof LocaleRoleIndexRoute
+  LocaleRoleStudentsStudentIdRoute: typeof LocaleRoleStudentsStudentIdRoute
+  LocaleRoleStudentsIndexRoute: typeof LocaleRoleStudentsIndexRoute
 }
 
-const RoleRouteChildren: RoleRouteChildren = {
-  RoleCoursesRoute: RoleCoursesRoute,
-  RoleExamActivityRoute: RoleExamActivityRoute,
-  RoleIntegrityRoute: RoleIntegrityRoute,
-  RoleItemAnalysisRoute: RoleItemAnalysisRoute,
-  RoleParticipationRoute: RoleParticipationRoute,
-  RolePerformanceRoute: RolePerformanceRoute,
-  RoleRealTimeRoute: RoleRealTimeRoute,
-  RoleIndexRoute: RoleIndexRoute,
-  RoleStudentsStudentIdRoute: RoleStudentsStudentIdRoute,
-  RoleStudentsIndexRoute: RoleStudentsIndexRoute,
+const LocaleRoleRouteChildren: LocaleRoleRouteChildren = {
+  LocaleRoleCoursesRoute: LocaleRoleCoursesRoute,
+  LocaleRoleExamActivityRoute: LocaleRoleExamActivityRoute,
+  LocaleRoleIntegrityRoute: LocaleRoleIntegrityRoute,
+  LocaleRoleItemAnalysisRoute: LocaleRoleItemAnalysisRoute,
+  LocaleRoleParticipationRoute: LocaleRoleParticipationRoute,
+  LocaleRolePerformanceRoute: LocaleRolePerformanceRoute,
+  LocaleRoleRealTimeRoute: LocaleRoleRealTimeRoute,
+  LocaleRoleIndexRoute: LocaleRoleIndexRoute,
+  LocaleRoleStudentsStudentIdRoute: LocaleRoleStudentsStudentIdRoute,
+  LocaleRoleStudentsIndexRoute: LocaleRoleStudentsIndexRoute,
 }
 
-const RoleRouteWithChildren = RoleRoute._addFileChildren(RoleRouteChildren)
+const LocaleRoleRouteWithChildren = LocaleRoleRoute._addFileChildren(
+  LocaleRoleRouteChildren,
+)
+
+interface LocaleRouteChildren {
+  LocaleRoleRoute: typeof LocaleRoleRouteWithChildren
+  LocaleLoginRoute: typeof LocaleLoginRoute
+}
+
+const LocaleRouteChildren: LocaleRouteChildren = {
+  LocaleRoleRoute: LocaleRoleRouteWithChildren,
+  LocaleLoginRoute: LocaleLoginRoute,
+}
+
+const LocaleRouteWithChildren =
+  LocaleRoute._addFileChildren(LocaleRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  RoleRoute: RoleRouteWithChildren,
+  LocaleRoute: LocaleRouteWithChildren,
   CoursesRoute: CoursesRoute,
   ExamActivityRoute: ExamActivityRoute,
   IntegrityRoute: IntegrityRoute,

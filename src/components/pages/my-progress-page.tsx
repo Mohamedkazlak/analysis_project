@@ -127,7 +127,7 @@ export function MyProgressPage() {
         />
       </div>
 
-      <AiDecisionSection role="student" />
+      <AiDecisionSection role="student" page="my-progress" />
 
       <Panel
         title={

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 import { getParticipationReport } from "@/lib/api";
+import { AiDecisionSection } from "@/components/ai-insights";
 import {
   AiInsight,
   Badge,
@@ -26,7 +27,7 @@ import { roleGuard } from "@/lib/auth/role-guards";
 import { ScopeBanner } from "@/components/dashboard/scope-banner";
 import { useLocale, translateOrgName, translateStanding } from "@/lib/i18n";
 
-export const Route = createFileRoute("/$role/participation")({
+export const Route = createFileRoute("/$locale/$role/participation")({
   beforeLoad: roleGuard("/participation"),
   head: () => ({
     meta: [
@@ -193,6 +194,7 @@ function Participation() {
       </Panel>
 
       <AiInsight>{data.insight}</AiInsight>
+      <AiDecisionSection page="participation" />
 
       <Panel title={timeTitle}>
         <div

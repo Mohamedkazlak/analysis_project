@@ -16,6 +16,7 @@ import {
   type AnalyticsFilters,
   type FilterOptionsResponse,
 } from "./filter-types";
+import { isLoginPath, loginPath, readStoredLocale } from "./i18n/locale-path";
 
 export const BACKEND_URL: string =
   import.meta.env["VITE_BACKEND_URL"] ?? "http://localhost:8000";
@@ -61,9 +62,9 @@ export async function fetchFromBackend<T>(
       clearAuthToken();
       if (
         typeof window !== "undefined" &&
-        window.location.pathname !== "/login"
+        !isLoginPath(window.location.pathname)
       ) {
-        window.location.href = "/login";
+        window.location.href = loginPath(readStoredLocale());
       }
       throw new ApiError("Unauthorized", 401);
     }
@@ -71,10 +72,16 @@ export async function fetchFromBackend<T>(
       throw new ApiError("Access Denied", 403);
     }
     if (!response.ok) {
-      throw new ApiError(
-        `Backend error: ${response.status} ${response.statusText}`,
-        response.status,
-      );
+      let detail = `${response.status} ${response.statusText}`;
+      try {
+        const payload = (await response.json()) as { detail?: unknown };
+        if (typeof payload.detail === "string" && payload.detail.trim()) {
+          detail = payload.detail.trim();
+        }
+      } catch {
+        // ignore non-JSON error bodies
+      }
+      throw new ApiError(detail, response.status);
     }
     return (await response.json()) as T;
   } catch (error) {

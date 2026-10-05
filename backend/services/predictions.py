@@ -17,6 +17,7 @@ from schemas.auth import UserContext
 from schemas.filters import AnalyticsFilters
 from repositories.sql_filters import course_org_where
 from services.ai_rules import ATTENDANCE_WATCH, PASS_RATE_THRESHOLD
+from services.ai_thresholds import MIN_FORECAST_OBSERVATIONS
 from core.locale import Language, entity, txt
 
 SUMMARY_NOTE_EN = (
@@ -29,7 +30,6 @@ SUMMARY_NOTE_AR = (
 )
 SUMMARY_NOTE = SUMMARY_NOTE_EN
 FORECAST_METHOD = "ols_linear_v1"
-MIN_FORECAST_OBSERVATIONS = 3
 
 
 def _tone_for(value: float, benchmark: float) -> str:

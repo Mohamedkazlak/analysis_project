@@ -14,10 +14,10 @@ from rag.errors import LlmNotConfigured, LlmUpstreamError, QueryRejected
 from rag.llm_client import chat_completion
 from rag.permissions import allowed_tables
 from rag.question_sql import (
-    NOT_UNDERSTOOD,
-    OUT_OF_CONTEXT,
     extract_select,
     is_out_of_context_sql,
+    not_understood_reply,
+    out_of_context_reply,
     sql_for_question,
 )
 from rag.schema_docs import build_schema_context
@@ -306,8 +306,13 @@ async def answer_question(
     db: asyncpg.Connection,
     question: str,
     pool=None,
+    *,
+    language: str = "en",
 ) -> dict:
+    from core.locale import normalize_language
+
     started = time.perf_counter()
+    lang = normalize_language(language)
     cleaned = redact_secrets((question or "").strip())
     if not cleaned or len(cleaned) > 2000:
         raise HTTPException(status_code=400, detail="Question is empty or too long")
@@ -342,7 +347,7 @@ async def answer_question(
     if is_out_of_context_sql(raw_sql):
         elapsed = int((time.perf_counter() - started) * 1000)
         await _log(pool, ctx, cleaned, None, 0, None, elapsed, True)
-        return {"text": OUT_OF_CONTEXT, "blocked": False}
+        return {"text": out_of_context_reply(lang), "blocked": False}
 
     generated_sql = None
     try:
@@ -355,7 +360,7 @@ async def answer_question(
             if is_out_of_context_sql(raw_sql):
                 elapsed = int((time.perf_counter() - started) * 1000)
                 await _log(pool, ctx, cleaned, None, 0, None, elapsed, True)
-                return {"text": OUT_OF_CONTEXT, "blocked": False}
+                return {"text": out_of_context_reply(lang), "blocked": False}
             records, generated_sql = await _query(ctx, db, pool, raw_sql)
     except QueryRejected as exc:
         elapsed = int((time.perf_counter() - started) * 1000)
@@ -369,7 +374,9 @@ async def answer_question(
             elapsed,
             False,
         )
-        raise HTTPException(status_code=exc.status_code, detail=NOT_UNDERSTOOD) from exc
+        raise HTTPException(
+            status_code=exc.status_code, detail=not_understood_reply(lang)
+        ) from exc
     except LlmNotConfigured:
         elapsed = int((time.perf_counter() - started) * 1000)
         await _log(pool, ctx, cleaned, None, None, "llm_unconfigured", elapsed, False)

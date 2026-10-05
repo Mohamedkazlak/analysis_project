@@ -154,12 +154,55 @@ class AiDecision(BaseModel):
     # lands or gives up; "skipped" when narration is off or there is nothing
     # to reword.
     narrationStatus: Literal["pending", "done", "skipped"] = "skipped"
+    # Deterministic fact packet + narrative overlays (Path 2 card upgrades).
+    factPacket: Optional[dict] = None
+    narrative: Optional[dict] = None
+    ruleAlerts: Optional[List[dict]] = None
+    anomalies: Optional[List[dict]] = None
+    impactItems: Optional[List[dict]] = None
+    provenance: Optional[dict] = None
+    forecastStatus: Optional[dict] = None
+    evidenceQuality: Optional[dict] = None
+    page: Optional[str] = None
+    pageLabel: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
     question: str
+    # Handoff ids only — server re-derives facts and re-checks scope.
+    cardId: Optional[str] = None
+    slice: Optional[dict] = None
+    itemId: Optional[str] = None
+    language: Optional[str] = None
+
+
+class ChatActivityStep(BaseModel):
+    id: str
+    label: str
+    done: bool = True
+
+
+class ChatAnalyticalObject(BaseModel):
+    type: Literal[
+        "metric",
+        "comparison",
+        "warning",
+        "pattern",
+        "what_if",
+        "recommendation",
+        "evidence",
+        "policy",
+        "prediction",
+    ]
+    title: str
+    data: dict = {}
 
 
 class ChatResponse(BaseModel):
     text: str
     blocked: bool
+    openIssues: Optional[List[str]] = None
+    activities: Optional[List[ChatActivityStep]] = None
+    objects: Optional[List[ChatAnalyticalObject]] = None
+    evidenceQuality: Optional[dict] = None
+    sources: Optional[List[dict]] = None

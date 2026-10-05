@@ -23,7 +23,9 @@ async def post_ai_decision(
 ):
     filters = await validate_analytics_filters(ctx, db, body.to_filters())
     language = normalize_language(body.language)
-    return await ai_service.get_ai_decision(ctx, db, filters, language=language)
+    return await ai_service.get_ai_decision(
+        ctx, db, filters, language=language, page=body.page
+    )
 
 
 @router.get("/api/insights", response_model=Optional[Insight])

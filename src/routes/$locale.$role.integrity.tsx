@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { IntegrityPage } from "@/components/pages/integrity-page";
 import { roleGuard } from "@/lib/auth/role-guards";
 
-export const Route = createFileRoute("/$role/integrity")({
+export const Route = createFileRoute("/$locale/$role/integrity")({
   beforeLoad: roleGuard("/integrity"),
   head: () => ({
     meta: [

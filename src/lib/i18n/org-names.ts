@@ -44,6 +44,12 @@ const TOPIC_AR: Record<string, string> = {
   "Data Structures": "هياكل البيانات",
   "Operating Systems": "نظم التشغيل",
   "Course assessment": "تقييم المقرر",
+  Architecture: "الهندسة المعمارية",
+  "Use Cases": "حالات الاستخدام",
+  "Sequence Diagrams": "مخططات التسلسل",
+  Requirements: "المتطلبات",
+  "Data Modeling": "نمذجة البيانات",
+  "UI Flows": "تدفقات الواجهة",
   General: "عام",
   None: "لا يوجد",
 };

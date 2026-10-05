@@ -11,6 +11,8 @@ class AnalyticsFilters(BaseModel):
     curriculum_id: Optional[str] = None
     student_id: Optional[str] = None
     professor_id: Optional[str] = None
+    academic_year_id: Optional[str] = None
+    term_id: Optional[str] = None
 
     @classmethod
     def from_query(
@@ -20,6 +22,8 @@ class AnalyticsFilters(BaseModel):
         curriculum_id: Optional[str] = None,
         student_id: Optional[str] = None,
         professor_id: Optional[str] = None,
+        academic_year_id: Optional[str] = None,
+        term_id: Optional[str] = None,
     ) -> "AnalyticsFilters":
         def clean(value: Optional[str]) -> Optional[str]:
             if value is None:
@@ -33,6 +37,8 @@ class AnalyticsFilters(BaseModel):
             curriculum_id=clean(curriculum_id),
             student_id=clean(student_id),
             professor_id=clean(professor_id),
+            academic_year_id=clean(academic_year_id),
+            term_id=clean(term_id),
         )
 
 
@@ -77,7 +83,11 @@ class AiDecisionRequest(BaseModel):
     curriculumId: Optional[str] = None
     studentId: Optional[str] = None
     professorId: Optional[str] = None
+    academicYearId: Optional[str] = None
+    termId: Optional[str] = None
     language: Optional[str] = "en"
+    # Dashboard surface requesting analysis (overview, courses, …).
+    page: Optional[str] = "overview"
 
     def to_filters(self) -> AnalyticsFilters:
         return AnalyticsFilters.from_query(
@@ -86,4 +96,6 @@ class AiDecisionRequest(BaseModel):
             self.curriculumId,
             self.studentId,
             self.professorId,
+            self.academicYearId,
+            self.termId,
         )

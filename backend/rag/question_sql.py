@@ -7,6 +7,8 @@ statement before it runs.
 
 import re
 
+from core.locale import Language, normalize_language, txt
+
 _SELECT = re.compile(r"^\s*select\b", re.IGNORECASE)
 _FENCED_SELECT = re.compile(
     r"```(?:sql)?\s*(select\b.+?)```", re.IGNORECASE | re.DOTALL
@@ -49,18 +51,40 @@ def extract_select(raw: str) -> str:
     return statement.strip().rstrip(";").strip()
 
 
-NOT_UNDERSTOOD = "I did not understand the question. Can you repeat it again ?"
+# Keep English constants for older imports/tests; prefer the helpers below.
+NOT_UNDERSTOOD = "I did not understand the question. Can you repeat it again?"
 OUT_OF_CONTEXT = (
     "Hi, I'm a chatbot built to help you navigate the system. "
-    "What can I do to help you ?"
+    "What can I do to help you?"
 )
+
+
+def not_understood_reply(language: Language | str = "en") -> str:
+    lang = normalize_language(str(language))
+    return txt(
+        lang,
+        NOT_UNDERSTOOD,
+        "لم أفهم السؤال. هل يمكنك إعادة صياغته؟",
+    )
+
+
+def out_of_context_reply(language: Language | str = "en") -> str:
+    lang = normalize_language(str(language))
+    return txt(
+        lang,
+        OUT_OF_CONTEXT,
+        "مرحباً، أنا المساعد الذكي. دوري هو مساعدتك على التنقل في النظام. كيف يمكنني المساعدة ؟",
+    )
+
 
 _WHO = re.compile(
     r"^(?:please\s+|can you tell me\s+|tell me\s+)?" r"(who am i|whoami|من انا)\s*\??$"
 )
 _SMALLTALK = re.compile(
     r"^(hi|hello|hey|thanks|thank you|how are you|good morning|good evening|"
-    r"what(?:'s| is) up|help|سلام|مرحبا|اهلا|السلام عليكم)\s*[!?.]*$"
+    r"what(?:'s| is) up|help|"
+    r"سلام|مرحبا|اهلا|هلا|السلام عليكم|كيف حالك|كيف الحال|شكرا|شكرًا|"
+    r"صباح الخير|مساء الخير|مساعدة)\s*[!?.؟]*$"
 )
 _UNSUPPORTED_SQL = re.compile(
     r"select\s+1\s+as\s+unsupported\s+where\s+false",
@@ -69,20 +93,25 @@ _UNSUPPORTED_SQL = re.compile(
 
 
 def _bare(question: str) -> str:
-    return re.sub(r"[?!.,]+$", "", _norm(question).strip()).strip()
+    return re.sub(r"[?!.,؟]+$", "", _norm(question).strip()).strip()
 
 
-def identity_reply(name: str | None, display_role: str | None) -> str:
+def identity_reply(
+    name: str | None,
+    display_role: str | None,
+    language: Language | str = "en",
+) -> str:
     """Name and role come from the signed-in account, not from the model."""
+    lang = normalize_language(str(language))
     who = (name or "").strip()
     role = (display_role or "").strip()
     if who and role:
-        return f"You're {who}, {role}."
+        return txt(lang, f"You're {who}, {role}.", f"أنت {who}، {role}.")
     if who:
-        return f"You're {who}."
+        return txt(lang, f"You're {who}.", f"أنت {who}.")
     if role:
-        return f"You're {role}."
-    return "You're signed in."
+        return txt(lang, f"You're {role}.", f"أنت {role}.")
+    return txt(lang, "You're signed in.", "أنت مسجّل الدخول.")
 
 
 def static_reply(
@@ -90,13 +119,14 @@ def static_reply(
     *,
     name: str | None = None,
     display_role: str | None = None,
+    language: Language | str = "en",
 ) -> str | None:
     """A fixed answer, or None when the question still needs SQL."""
     text = _bare(question)
     if _WHO.fullmatch(text):
-        return identity_reply(name, display_role)
+        return identity_reply(name, display_role, language=language)
     if _SMALLTALK.fullmatch(text):
-        return OUT_OF_CONTEXT
+        return out_of_context_reply(language)
     return None
 
 

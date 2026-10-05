@@ -24,7 +24,7 @@ import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { roleGuard } from "@/lib/auth/role-guards";
 import { useLocale, translateOrgName } from "@/lib/i18n";
 
-export const Route = createFileRoute("/$role/real-time")({
+export const Route = createFileRoute("/$locale/$role/real-time")({
   beforeLoad: roleGuard("/real-time"),
   head: () => ({
     meta: [
@@ -151,7 +151,8 @@ function RealTime() {
         />
       </div>
 
-      {isIntegrity && <AiDecisionSection role="it_academic_integrity" />}
+      {isIntegrity && <AiDecisionSection role="it_academic_integrity" page="real-time" />}
+      {!isIntegrity && <AiDecisionSection page="real-time" />}
 
       <Panel
         title={

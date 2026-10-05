@@ -419,6 +419,386 @@ def _insight_from_context(
     return None
 
 
+def _insight_for_page(
+    role: str,
+    data: dict[str, Any],
+    page: str,
+    language: Language = "en",
+) -> Optional[dict]:
+    """SQL-backed insight tailored to the dashboard page the user is on."""
+    from services.ai_pages import normalize_page
+
+    page = normalize_page(page)
+    if role == "student" and page != "my-progress":
+        return None
+
+    if page == "overview":
+        return _overview_combined_insight(role, data, language)
+
+    if page == "participation":
+        return _participation_page_insight(data, language) or _insight_from_context(
+            role, data, language
+        )
+
+    if page in ("courses", "exam-activity"):
+        return _courses_page_insight(
+            data, language, page=page
+        ) or _insight_from_context(role, data, language)
+
+    if page == "performance" or page == "students":
+        return _performance_page_insight(data, language) or _insight_from_context(
+            role, data, language
+        )
+
+    if page == "item-analysis":
+        return _items_page_insight(data, language) or _insight_from_context(
+            role, data, language
+        )
+
+    if page in ("integrity", "real-time"):
+        # Prefer the integrity role template when flagged data is present.
+        integrity_insight = _insight_from_context(
+            (
+                "it_academic_integrity"
+                if data.get("integrity") or data.get("flagged")
+                else role
+            ),
+            data,
+            language,
+        )
+        if integrity_insight:
+            return integrity_insight
+        return _insight_from_context(role, data, language)
+
+    if page in ("student", "my-progress"):
+        return _insight_from_context(role, data, language)
+
+    return _insight_from_context(role, data, language)
+
+
+def _overview_combined_insight(
+    role: str, data: dict[str, Any], language: Language
+) -> Optional[dict]:
+    """One-card summary across every dataset loaded for the role."""
+    base = _insight_from_context(role, data, language)
+    extras_en: list[str] = []
+    extras_ar: list[str] = []
+
+    participation = data.get("participation") or {}
+    att = participation.get("attendanceRate")
+    if att is None:
+        att = (data.get("overview") or {}).get("totals", {}).get("attendance")
+    curricula = participation.get("attendanceByCurriculum") or []
+    if att is not None:
+        extras_en.append(f"Attendance is {att}%")
+        extras_ar.append(f"الحضور {att}%")
+    if curricula:
+        weakest_att = min(curricula, key=lambda c: c["attendance"])
+        extras_en.append(
+            f"weakest attendance is {weakest_att['course']} at {weakest_att['attendance']}%"
+        )
+        extras_ar.append(
+            f"أضعف حضور هو {weakest_att['course']} بنسبة {weakest_att['attendance']}%"
+        )
+
+    performance = data.get("performance") or {}
+    below_pass = [
+        r for r in performance.get("ranked") or [] if r.get("status") == "Fail"
+    ]
+    if below_pass:
+        extras_en.append(f"{len(below_pass)} student(s) are below the pass mark")
+        extras_ar.append(f"{len(below_pass)} طالبًا دون درجة النجاح")
+
+    items = data.get("items") or {}
+    needs_review = items.get("needsReview") or []
+    if needs_review:
+        top = needs_review[0]
+        extras_en.append(
+            f"{top['exam']} Q{top['number']} needs item review "
+            f"(discrimination {top['discriminationIndex']})"
+        )
+        extras_ar.append(
+            f"السؤال {top['number']} في {top['exam']} يحتاج مراجعة بند "
+            f"(تمييز {top['discriminationIndex']})"
+        )
+
+    integrity = data.get("integrity") or {}
+    if integrity.get("totalAttempts"):
+        extras_en.append(
+            f"{integrity.get('flaggedCount', 0)} of {integrity['totalAttempts']} "
+            "monitored attempts are flagged"
+        )
+        extras_ar.append(
+            f"{integrity.get('flaggedCount', 0)} من {integrity['totalAttempts']} "
+            "محاولة مراقَبة معلّمة"
+        )
+
+    if not base and not extras_en:
+        return None
+    if not base:
+        return {
+            "headline": txt(
+                language,
+                "Overview of current academic signals",
+                "نظرة عامة على الإشارات الأكاديمية الحالية",
+            ),
+            "body": (
+                ". ".join(p[0].upper() + p[1:] for p in extras_en) + "."
+                if language != "ar"
+                else ". ".join(extras_ar) + "."
+            ),
+            "action": None,
+        }
+
+    if extras_en:
+        body = base.get("body") or ""
+        addition = (
+            " ".join(p[0].upper() + p[1:] + "." for p in extras_en)
+            if language != "ar"
+            else " ".join(p + "." for p in extras_ar)
+        )
+        base = {**base, "body": (body + " " + addition).strip()}
+    return base
+
+
+def _participation_page_insight(
+    data: dict[str, Any], language: Language
+) -> Optional[dict]:
+    participation = data.get("participation") or {}
+    curricula = participation.get("attendanceByCurriculum") or []
+    att = participation.get("attendanceRate")
+    if att is None:
+        att = (data.get("overview") or {}).get("totals", {}).get("attendance")
+    if not curricula and att is None:
+        return None
+    if curricula:
+        weakest = min(curricula, key=lambda c: c["attendance"])
+        return {
+            "headline": txt(
+                language,
+                f"{weakest['course']} has the weakest attendance at {weakest['attendance']}%",
+                f"{weakest['course']} لديها أضعف حضور بنسبة {weakest['attendance']}%",
+            ),
+            "body": txt(
+                language,
+                (
+                    f"Across {len(curricula)} curricula, {weakest['course']} sits at "
+                    f"{weakest['attendance']}% attendance"
+                    + (
+                        f" while the scope average is {att}%."
+                        if att is not None
+                        else "."
+                    )
+                ),
+                (
+                    f"عبر {len(curricula)} مقررًا، تبلغ {weakest['course']} "
+                    f"{weakest['attendance']}% حضورًا"
+                    + (f" بينما متوسط النطاق {att}%." if att is not None else ".")
+                ),
+            ),
+            "action": {
+                "label": txt(language, "Open attendance", "فتح الحضور"),
+                "to": "/participation",
+            },
+        }
+    return {
+        "headline": txt(
+            language,
+            f"Attendance is {att}% in this scope",
+            f"الحضور {att}% في هذا النطاق",
+        ),
+        "body": txt(
+            language,
+            f"Scope attendance is currently {att}%. Drill into curricula for detail.",
+            f"حضور النطاق حاليًا {att}%. فصّل حسب المقررات للمزيد.",
+        ),
+        "action": {
+            "label": txt(language, "Open attendance", "فتح الحضور"),
+            "to": "/participation",
+        },
+    }
+
+
+def _courses_page_insight(
+    data: dict[str, Any], language: Language, *, page: str
+) -> Optional[dict]:
+    overview = data.get("overview") or {}
+    courses = overview.get("passRateByCourse") or []
+    sections = (data.get("courses") or {}).get("sections") or []
+    totals = overview.get("totals") or {}
+
+    if courses:
+        weakest = min(courses, key=lambda c: c["passRate"])
+        headline = txt(
+            language,
+            f"{weakest['course']} has the lowest pass rate at {weakest['passRate']}%",
+            f"{weakest['course']} لديها أدنى معدل نجاح بنسبة {weakest['passRate']}%",
+        )
+        body = txt(
+            language,
+            (
+                f"Among {len(courses)} curricula, {weakest['course']} is lowest at "
+                f"{weakest['passRate']}% pass"
+                + (
+                    f" versus a scope pass rate of {totals['passRate']}%."
+                    if totals.get("passRate") is not None
+                    else "."
+                )
+            ),
+            (
+                f"من بين {len(courses)} مقررًا، {weakest['course']} الأدنى بمعدل "
+                f"{weakest['passRate']}% نجاح"
+                + (
+                    f" مقابل معدل نجاح النطاق {totals['passRate']}%."
+                    if totals.get("passRate") is not None
+                    else "."
+                )
+            ),
+        )
+        if page == "exam-activity" and totals.get("exams") is not None:
+            body += txt(
+                language,
+                f" {int(totals['exams'])} exams were administered in this scope.",
+                f" أُجري {int(totals['exams'])} امتحانًا في هذا النطاق.",
+            )
+        return {
+            "headline": headline,
+            "body": body,
+            "action": {
+                "label": txt(language, "Drill into curriculum", "التفصيل حسب المقرر"),
+                "to": "/courses",
+            },
+        }
+
+    if sections:
+        weakest = min(sections, key=lambda s: s.get("passRate", s.get("average", 0)))
+        rate = weakest.get("passRate", weakest.get("average"))
+        return {
+            "headline": txt(
+                language,
+                f"{weakest.get('section') or weakest.get('course')} is the weakest section at {rate}",
+                f"{weakest.get('section') or weakest.get('course')} هي أضعف شعبة عند {rate}",
+            ),
+            "body": txt(
+                language,
+                f"Compare sections in this curriculum; lowest currently is "
+                f"{weakest.get('section') or weakest.get('course')} at {rate}.",
+                f"قارن الشعب في هذا المقرر؛ الأدنى حاليًا "
+                f"{weakest.get('section') or weakest.get('course')} عند {rate}.",
+            ),
+            "action": {
+                "label": txt(language, "Compare sections", "مقارنة الشعب"),
+                "to": "/performance",
+            },
+        }
+    return None
+
+
+def _performance_page_insight(
+    data: dict[str, Any], language: Language
+) -> Optional[dict]:
+    performance = data.get("performance") or {}
+    ranked = performance.get("ranked") or []
+    below_pass = [r for r in ranked if r.get("status") == "Fail"]
+    overview = data.get("overview") or {}
+    totals = overview.get("totals") or {}
+    if below_pass:
+        return {
+            "headline": txt(
+                language,
+                f"{len(below_pass)} students below the pass mark this term",
+                f"{len(below_pass)} طالبًا دون درجة النجاح هذا الفصل",
+            ),
+            "body": txt(
+                language,
+                (
+                    f"{len(below_pass)} of {len(ranked)} listed students are currently "
+                    f"below the {PASS_MARK}% pass mark"
+                    + (
+                        f". Scope pass rate is {totals['passRate']}%."
+                        if totals.get("passRate") is not None
+                        else "."
+                    )
+                ),
+                (
+                    f"{len(below_pass)} من {len(ranked)} طالبًا مدرجًا دون درجة النجاح "
+                    f"{PASS_MARK}% حاليًا"
+                    + (
+                        f". معدل نجاح النطاق {totals['passRate']}%."
+                        if totals.get("passRate") is not None
+                        else "."
+                    )
+                ),
+            ),
+            "action": {
+                "label": txt(language, "Open student performance", "فتح أداء الطلاب"),
+                "to": "/performance",
+            },
+        }
+    if totals.get("passRate") is not None:
+        return {
+            "headline": txt(
+                language,
+                f"Student pass rate is {totals['passRate']}%",
+                f"معدل نجاح الطلاب هو {totals['passRate']}%",
+            ),
+            "body": txt(
+                language,
+                "No students are flagged below the pass mark in the current list.",
+                "لا يوجد طلاب دون درجة النجاح في القائمة الحالية.",
+            ),
+            "action": {
+                "label": txt(language, "Open student performance", "فتح أداء الطلاب"),
+                "to": "/performance",
+            },
+        }
+    return None
+
+
+def _items_page_insight(data: dict[str, Any], language: Language) -> Optional[dict]:
+    items = data.get("items") or {}
+    needs_review = items.get("needsReview") or []
+    if not needs_review:
+        return {
+            "headline": txt(
+                language,
+                "No items flagged for review",
+                "لا بنود معلّمة للمراجعة",
+            ),
+            "body": txt(
+                language,
+                "Item analysis has no discrimination flags in this scope yet.",
+                "تحليل البنود بلا إشارات تمييز في هذا النطاق بعد.",
+            ),
+            "action": None,
+        }
+    top = needs_review[0]
+    return {
+        "headline": txt(
+            language,
+            f"{top['exam']} question {top['number']} needs review",
+            f"السؤال {top['number']} في {top['exam']} يحتاج مراجعة",
+        ),
+        "body": txt(
+            language,
+            (
+                f"Discrimination index is {top['discriminationIndex']} on "
+                f"{top.get('topic') or 'this item'}; {len(needs_review)} item(s) "
+                "are queued for review."
+            ),
+            (
+                f"مؤشر التمييز هو {top['discriminationIndex']} في "
+                f"{top.get('topic') or 'هذا البند'}؛ {len(needs_review)} بندًا "
+                "في قائمة المراجعة."
+            ),
+        ),
+        "action": {
+            "label": txt(language, "Open item analysis", "فتح تحليل البنود"),
+            "to": "/item-analysis",
+        },
+    }
+
+
 def _recommendations_from_context(
     role: str,
     data: dict[str, Any],
@@ -1027,22 +1407,83 @@ async def _compute_decision(
     insight_id: str,
     data_version: str,
     language: Language = "en",
+    page: str = "overview",
 ) -> dict:
-    data = await load_ai_context(ctx, db, filters)
-    evidence = build_evidence(ctx.role, data)
-    warnings = build_warnings(ctx.role, evidence, data, language=language)
+    from services.ai_pages import normalize_page, page_focus as _page_focus
+    from services.ai_page_focus import (
+        apply_page_to_decision_fields,
+        filter_evidence,
+        filter_recommendations,
+        filter_warnings,
+        focus_packet,
+    )
+
+    page = normalize_page(page)
+    data = await load_ai_context(ctx, db, filters, page=page)
+    evidence = filter_evidence(build_evidence(ctx.role, data), page)
+    warnings = filter_warnings(
+        build_warnings(ctx.role, evidence, data, language=language), page
+    )
     insight = _attach_warnings(
-        _insight_from_context(ctx.role, data, language), warnings
+        _insight_for_page(ctx.role, data, page, language), warnings
     )
     prediction = await get_standing_or_forecast(
         ctx, db, filters, data, language=language
     )
-    recommendations = _recommendations_from_context(
-        ctx.role, data, insight_id, language
+    recommendations = filter_recommendations(
+        _recommendations_from_context(ctx.role, data, insight_id, language),
+        page,
     )
+
+    from services.ai_facts.packet import build_fact_packet, packet_to_decision_fields
+    from services.ai_facts.narration import template_narrative
+
+    packet = await build_fact_packet(
+        ctx,
+        db,
+        filters,
+        data,
+        warnings=warnings or [],
+        prediction=prediction,
+        data_version=data_version,
+        card_id=f"{page}:{insight_id}",
+        language=language,
+    )
+    packet = focus_packet(packet, page)
+    narrative = template_narrative(packet, language=language, page=page)
+    # Prefer causal narrative when page-relevant drivers exist. Otherwise keep
+    # the page-local SQL insight and mirror it into narrative (UI reads narrative
+    # first) so cards do not all collapse to a renamed overview sentence.
+    if insight and packet.drivers and narrative.get("headline"):
+        insight = {
+            **insight,
+            "headline": narrative["headline"],
+            "body": narrative.get("story") or insight.get("body"),
+        }
+    elif insight and not packet.drivers:
+        narrative = {
+            **narrative,
+            "headline": insight.get("headline") or narrative.get("headline"),
+            "story": insight.get("body") or narrative.get("story"),
+            "source": narrative.get("source") or "template",
+        }
+    elif not insight and narrative.get("headline"):
+        insight = {
+            "headline": narrative["headline"],
+            "body": narrative.get("story") or "",
+            "action": None,
+        }
+    fact_fields = apply_page_to_decision_fields(
+        packet_to_decision_fields(packet, narrative, language=language),
+        page,
+        language=language,
+    )
+
+    show_forecast = bool(_page_focus(page).get("show_forecast", True))
+
     return {
         "insight": insight,
-        "prediction": prediction,
+        "prediction": prediction if show_forecast else None,
         "recommendations": recommendations,
         "warnings": warnings or None,
         "evidence": evidence or None,
@@ -1053,12 +1494,14 @@ async def _compute_decision(
             "dataVersion": data_version,
             "filters": filters.model_dump(),
             "language": language,
+            "page": page,
         },
         "validation": {"status": "not_run", "failures": 0},
         "dataStatus": "ready" if evidence else "insufficient",
         "status": "ok",
         "message": None,
         "narrationStatus": "skipped",
+        **fact_fields,
     }
 
 
@@ -1077,6 +1520,50 @@ async def _narrate_and_recache(key: str, snapshot: dict) -> None:
             apply_llm_narratives(snapshot),
             timeout=settings.AI_NARRATIVE_BACKGROUND_BUDGET_SECONDS,
         )
+        # Optional fact-packet narration (JSON, validated).
+        packet_dict = snapshot.get("factPacket")
+        if packet_dict and settings.AI_NARRATIVE_ENABLED:
+            from services.ai_facts.models import (
+                Anomaly,
+                Driver,
+                FactPacket,
+                ForecastStatus,
+                ImpactItem,
+                Provenance,
+                RuleAlert,
+            )
+            from services.ai_facts.narration import narrate_packet
+
+            fp = packet_dict
+            packet = FactPacket(
+                card_id=fp.get("card_id") or "ai-decision",
+                role=fp.get("role") or "",
+                scope_id=fp.get("scope_id"),
+                slice=fp.get("slice") or {},
+                data_version=fp.get("data_version") or "",
+                headline_metrics=fp.get("headline_metrics") or {},
+                drivers=[Driver(**d) for d in fp.get("drivers") or []],
+                rule_alerts=[RuleAlert(**a) for a in fp.get("rule_alerts") or []],
+                anomalies=[Anomaly(**a) for a in fp.get("anomalies") or []],
+                impact_items=[ImpactItem(**i) for i in fp.get("impact_items") or []],
+                forecast=(
+                    ForecastStatus(**fp["forecast"]) if fp.get("forecast") else None
+                ),
+                provenance=(
+                    Provenance(**fp["provenance"]) if fp.get("provenance") else None
+                ),
+                story_template=fp.get("story_template") or "",
+                no_structural_cause=bool(fp.get("no_structural_cause")),
+            )
+            language = (snapshot.get("metadata") or {}).get("language") or "en"
+            narr = await narrate_packet(packet, language=language)
+            snapshot["narrative"] = narr
+            if snapshot.get("insight") and narr.get("headline"):
+                snapshot["insight"] = {
+                    **snapshot["insight"],
+                    "headline": narr["headline"],
+                    "body": narr.get("story") or snapshot["insight"].get("body"),
+                }
     except Exception:
         logger.warning("background AI narration did not finish in time", exc_info=True)
     finally:
@@ -1100,8 +1587,12 @@ async def get_ai_decision(
     filters: AnalyticsFilters,
     insight_id: str = "insight",
     language: Language | str = "en",
+    page: str | None = "overview",
 ) -> dict:
+    from services.ai_pages import normalize_page
+
     language = normalize_language(str(language))
+    page = normalize_page(page)
     year_id = (
         await db.fetchval("SELECT id FROM academic_years WHERE is_current LIMIT 1")
         or ""
@@ -1128,6 +1619,7 @@ async def get_ai_decision(
         term_id=term_id,
         data_version=data_version,
         language=language,
+        page=page,
     )
     cached = ai_cache.get(key)
     if cached is not None:
@@ -1135,7 +1627,13 @@ async def get_ai_decision(
     try:
         result = await asyncio.wait_for(
             _compute_decision(
-                ctx, db, filters, insight_id, data_version, language=language
+                ctx,
+                db,
+                filters,
+                insight_id,
+                data_version,
+                language=language,
+                page=page,
             ),
             timeout=settings.AI_BUDGET_SECONDS,
         )

@@ -17,6 +17,7 @@ import {
 } from "recharts";
 import { Sparkles } from "lucide-react";
 import { getStudentProfile } from "@/lib/api";
+import { AiDecisionSection } from "@/components/ai-insights";
 import { openChat } from "@/lib/chat-bus";
 import { useRole } from "@/components/role-context";
 import {
@@ -38,7 +39,7 @@ import {
   tooltipMirrorStyle,
 } from "@/components/dashboard/chart-rtl";
 
-export const Route = createFileRoute("/$role/students/$studentId")({
+export const Route = createFileRoute("/$locale/$role/students/$studentId")({
   beforeLoad: roleGuard("/students"),
   head: () => ({
     meta: [
@@ -74,8 +75,7 @@ const standingTone = (standing: string) =>
  * server-side check belongs in the server function + row-level policy.
  */
 function StudentProfile() {
-  const { role: roleParam } = Route.useParams();
-  const { studentId } = Route.useParams();
+  const { locale: localeParam, role: roleParam, studentId } = Route.useParams();
   const { role } = useRole();
   const { locale, messages } = useLocale();
   const rtl = locale === "ar";
@@ -111,6 +111,7 @@ function StudentProfile() {
 
   return (
     <>
+      <AiDecisionSection page="student" />
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -131,8 +132,8 @@ function StudentProfile() {
           <div className="flex items-center gap-3">
             <Badge tone={standingTone(data.standing)}>{data.standing}</Badge>
             <Link
-              to="/$role/students"
-              params={{ role: roleParam }}
+              to="/$locale/$role/students"
+              params={{ locale: localeParam, role: roleParam }}
               search={{}}
               className="text-[12px] font-semibold text-iris hover:underline"
             >

@@ -5,6 +5,14 @@ export {
   speechLanguageForLocale,
 } from "./locale-context";
 export {
+  isLocale,
+  isLoginPath,
+  loginPath,
+  readStoredLocale,
+  swapLocaleInPath,
+  withLocalePrefix,
+} from "./locale-path";
+export {
   translateOrgName,
   translatePersonTitle,
   translateScopeLabel,

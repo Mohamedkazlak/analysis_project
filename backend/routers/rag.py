@@ -22,4 +22,8 @@ async def post_chat(
         db,
         body.question,
         request.app.state.pool,
+        card_id=body.cardId,
+        slice_ids=body.slice,
+        item_id=body.itemId,
+        language=body.language,
     )

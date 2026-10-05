@@ -284,9 +284,12 @@ def test_smalltalk_and_unsupported_sql_stay_out_of_the_database():
             weather = await get_chat_answer(
                 _president(), db, "What is the weather today?"
             )
+            arabic = await get_chat_answer(_professor(), db, "كيف حالك", language="ar")
         assert calls["n"] == 1
         assert hello["text"].startswith("Hi, I'm a chatbot")
         assert weather["text"] == hello["text"]
+        assert arabic["text"].startswith("مرحبًا، أنا مساعد")
+        assert "chatbot" not in arabic["text"].lower()
         db.fetch.assert_not_called()
 
     asyncio.run(run())

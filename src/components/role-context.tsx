@@ -9,6 +9,12 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import type { DemoUser, Role, UserAffiliation, ViewerScope } from "@/lib/types";
 import { roleHome, ROLE_SLUG, SLUG_ROLE } from "@/lib/auth/role-guards";
+import {
+  isLocale,
+  isLoginPath,
+  loginPath,
+  readStoredLocale,
+} from "@/lib/i18n/locale-path";
 import { useRouterState } from "@tanstack/react-router";
 import {
   getAuthToken,
@@ -412,9 +418,9 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     if (
       typeof window !== "undefined" &&
       !token &&
-      window.location.pathname !== "/login"
+      !isLoginPath(window.location.pathname)
     ) {
-      window.location.href = "/login";
+      window.location.href = loginPath(readStoredLocale());
     }
   }, [pathname, tokenUser?.id, tokenUser?.role]);
 
@@ -429,12 +435,14 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     const me = meQuery.data;
     if (!me?.user_id || !me.role) return;
     rememberSessionRole(me.user_id, me.role);
-    if (pathname === "/login") return;
-    const slug = pathname.split("/").filter(Boolean)[0];
+    if (isLoginPath(pathname)) return;
+    const parts = pathname.split("/").filter(Boolean);
+    const slug = isLocale(parts[0]) ? parts[1] : parts[0];
     if (!slug || !SLUG_ROLE[slug]) return;
     const expected = ROLE_SLUG[me.role as Role];
+    const locale = isLocale(parts[0]) ? parts[0] : readStoredLocale();
     if (expected && slug !== expected) {
-      window.location.replace(roleHome(me.role as Role));
+      window.location.replace(roleHome(me.role as Role, locale));
     }
   }, [meQuery.data, pathname]);
 

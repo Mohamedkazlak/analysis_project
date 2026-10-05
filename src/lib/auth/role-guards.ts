@@ -1,5 +1,14 @@
 import { redirect } from "@tanstack/react-router";
 import type { Role } from "../types";
+import type { Locale } from "../i18n/types";
+import {
+  isLocale,
+  localeFromPathname,
+  loginPath,
+  readStoredLocale,
+  stripLocalePrefix,
+  withLocalePrefix,
+} from "../i18n/locale-path";
 import { getMe } from "../api";
 import {
   getAuthToken,
@@ -52,8 +61,11 @@ export function roleSlug(role: Role): string {
   return ROLE_SLUG[role];
 }
 
-export function roleHome(role: Role): string {
-  return `/${ROLE_SLUG[role]}`;
+export function roleHome(
+  role: Role,
+  locale: Locale = readStoredLocale(),
+): string {
+  return `/${locale}/${ROLE_SLUG[role]}`;
 }
 
 export const roleRoutes: Record<Role, string> = {
@@ -66,56 +78,69 @@ export const roleRoutes: Record<Role, string> = {
 };
 
 export function reportPath(pathname: string): string {
-  const parts = pathname.split("/").filter(Boolean);
+  const parts = stripLocalePrefix(pathname).split("/").filter(Boolean);
   if (parts[0] && SLUG_ROLE[parts[0]]) {
     const rest = parts.slice(1).join("/");
     return rest ? `/${rest}` : "/";
   }
-  return pathname || "/";
+  return stripLocalePrefix(pathname) || "/";
 }
 
-/** Map a backend/legacy leaf such as /courses onto /$role/courses. */
-export function roleHref(role: Role, leaf: string): string {
-  if (!leaf || leaf === "/" || HOME_LEAVES.has(leaf)) return roleHome(role);
-  return `${roleHome(role)}${leaf.startsWith("/") ? leaf : `/${leaf}`}`;
+/** Map a backend/legacy leaf such as /courses onto /{locale}/{role}/courses. */
+export function roleHref(
+  role: Role,
+  leaf: string,
+  locale: Locale = readStoredLocale(),
+): string {
+  if (!leaf || leaf === "/" || HOME_LEAVES.has(leaf)) {
+    return roleHome(role, locale);
+  }
+  return `${roleHome(role, locale)}${leaf.startsWith("/") ? leaf : `/${leaf}`}`;
 }
 
 export type RoleFileRoute =
-  | "/$role"
-  | "/$role/courses"
-  | "/$role/exam-activity"
-  | "/$role/performance"
-  | "/$role/students"
-  | "/$role/students/$studentId"
-  | "/$role/participation"
-  | "/$role/item-analysis"
-  | "/$role/integrity"
-  | "/$role/real-time";
+  | "/$locale/$role"
+  | "/$locale/$role/courses"
+  | "/$locale/$role/exam-activity"
+  | "/$locale/$role/performance"
+  | "/$locale/$role/students"
+  | "/$locale/$role/students/$studentId"
+  | "/$locale/$role/participation"
+  | "/$locale/$role/item-analysis"
+  | "/$locale/$role/integrity"
+  | "/$locale/$role/real-time";
 
-/** TanStack `to` path for a report leaf under /$role. */
+/** TanStack `to` path for a report leaf under /$locale/$role. */
 export function roleRouteTo(leaf: string): RoleFileRoute {
-  if (!leaf || leaf === "/" || HOME_LEAVES.has(leaf)) return "/$role";
-  return `/$role${leaf.startsWith("/") ? leaf : `/${leaf}`}` as RoleFileRoute;
+  if (!leaf || leaf === "/" || HOME_LEAVES.has(leaf)) return "/$locale/$role";
+  return `/$locale/$role${leaf.startsWith("/") ? leaf : `/${leaf}`}` as RoleFileRoute;
 }
 
-export function roleNavigateTarget(dest: string): {
+export function roleNavigateTarget(
+  dest: string,
+  locale?: Locale,
+): {
   to: RoleFileRoute;
-  params: { role: string; studentId?: string };
+  params: { locale: Locale; role: string; studentId?: string };
 } {
-  const parts = dest.split("/").filter(Boolean);
+  const loc =
+    locale ?? localeFromPathname(dest) ?? readStoredLocale();
+  const parts = stripLocalePrefix(dest).split("/").filter(Boolean);
   const slug = parts[0] ?? ROLE_SLUG.senior_management;
   const second = parts[1];
   const third = parts[2];
-  if (!second) return { to: "/$role", params: { role: slug } };
+  if (!second) {
+    return { to: "/$locale/$role", params: { locale: loc, role: slug } };
+  }
   if (second === "students" && third) {
     return {
-      to: "/$role/students/$studentId",
-      params: { role: slug, studentId: third },
+      to: "/$locale/$role/students/$studentId",
+      params: { locale: loc, role: slug, studentId: third },
     };
   }
   return {
-    to: `/$role/${second}` as RoleFileRoute,
-    params: { role: slug },
+    to: `/$locale/$role/${second}` as RoleFileRoute,
+    params: { locale: loc, role: slug },
   };
 }
 
@@ -123,29 +148,61 @@ export function roleNavigateTarget(dest: string): {
 export function legacyLeafGuard(leaf: string) {
   return async () => {
     if (typeof window === "undefined") return;
+    const locale = readStoredLocale();
     const role = await ensureActiveRole();
     if (!role) {
-      throw redirect({ to: "/login" });
+      throw redirect({
+        to: "/$locale/login",
+        params: { locale },
+      });
     }
     throw redirect({
       to: roleRouteTo(leaf),
-      params: { role: ROLE_SLUG[role] },
+      params: { locale, role: ROLE_SLUG[role] },
       search: {},
     });
   };
 }
 
-export function legacyRedirectTo(pathname: string, role: Role): string | null {
+/**
+ * Rewrite unprefixed or legacy URLs onto /{locale}/{role}/….
+ * Returns null when the path is already a localized role URL.
+ */
+export function legacyRedirectTo(
+  pathname: string,
+  role: Role,
+  locale?: Locale,
+): string | null {
   const parts = pathname.split("/").filter(Boolean);
-  const first = parts[0];
-  if (!first) return roleHome(role);
-  if (SLUG_ROLE[first]) return null;
-  const rest = parts.slice(1);
+  const loc =
+    locale ?? localeFromPathname(pathname) ?? readStoredLocale();
+
+  if (parts[0] === "login" || (isLocale(parts[0]) && parts[1] === "login")) {
+    return null;
+  }
+
+  // Already /{locale}/{role}/…
+  if (isLocale(parts[0]) && parts[1] && SLUG_ROLE[parts[1]]) {
+    return null;
+  }
+
+  // Unprefixed role URL: /senior-management/courses
+  if (parts[0] && SLUG_ROLE[parts[0]]) {
+    return withLocalePrefix(pathname, loc);
+  }
+
+  const bareParts = isLocale(parts[0]) ? parts.slice(1) : parts;
+  const first = bareParts[0];
+  if (!first) return roleHome(role, loc);
+
   if (first === "management" || first === "my-progress") {
-    return rest.length ? `${roleHome(role)}/${rest.join("/")}` : roleHome(role);
+    const rest = bareParts.slice(1);
+    return rest.length
+      ? `${roleHome(role, loc)}/${rest.join("/")}`
+      : roleHome(role, loc);
   }
   if (LEGACY_REPORTS.has(first)) {
-    return `${roleHome(role)}/${parts.join("/")}`;
+    return `${roleHome(role, loc)}/${bareParts.join("/")}`;
   }
   return null;
 }
@@ -234,15 +291,25 @@ export function rolesAllowedForPath(pathname: string): Role[] | undefined {
   return undefined;
 }
 
-export function assertRoleAccess(pathname: string, role: Role | null) {
+export function assertRoleAccess(
+  pathname: string,
+  role: Role | null,
+  locale: Locale = readStoredLocale(),
+) {
   if (!role) {
-    throw redirect({ to: "/login" });
+    throw redirect({
+      to: "/$locale/login",
+      params: { locale },
+    });
   }
 
   const allowed = rolesAllowedForPath(pathname);
   if (!allowed) return;
   if (!allowed.includes(role)) {
-    throw redirect({ to: roleHome(role) });
+    throw redirect({
+      to: "/$locale/$role",
+      params: { locale, role: ROLE_SLUG[role] },
+    });
   }
 }
 
@@ -250,6 +317,8 @@ export function assertRoleAccess(pathname: string, role: Role | null) {
 export function roleGuard(report: string) {
   return async () => {
     if (typeof window === "undefined") return;
-    assertRoleAccess(report, await ensureActiveRole());
+    assertRoleAccess(report, await ensureActiveRole(), readStoredLocale());
   };
 }
+
+export { loginPath, readStoredLocale };

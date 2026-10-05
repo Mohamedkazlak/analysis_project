@@ -21,7 +21,7 @@ import { FiltersRequiredNotice } from "@/components/dashboard/analytics-filters"
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 
 export function AcademicAffairsPage() {
-  const { role } = useParams({ from: "/$role" });
+  const { locale, role } = useParams({ from: "/$locale/$role" });
   const performanceQ = useFilteredQuery("student-performance");
   const participationQ = useFilteredQuery("participation");
   const directoryQ = useFilteredQuery("student-directory");
@@ -102,7 +102,7 @@ export function AcademicAffairsPage() {
         />
       </div>
 
-      <AiDecisionSection role="academic_affairs" />
+      <AiDecisionSection role="academic_affairs" page="overview" />
 
       <Panel title="Performance by curriculum">
         <TableShell>
@@ -148,8 +148,8 @@ export function AcademicAffairsPage() {
           title="Attendance alerts"
           action={
             <Link
-              to="/$role/participation"
-              params={{ role }}
+              to="/$locale/$role/participation"
+              params={{ locale, role }}
               search={{}}
               className="text-[12px] font-semibold text-iris underline underline-offset-2"
             >
@@ -178,8 +178,8 @@ export function AcademicAffairsPage() {
           title="Students needing follow-up"
           action={
             <Link
-              to="/$role/students"
-              params={{ role }}
+              to="/$locale/$role/students"
+              params={{ locale, role }}
               search={{}}
               className="text-[12px] font-semibold text-iris underline underline-offset-2"
             >

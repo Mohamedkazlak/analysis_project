@@ -73,7 +73,13 @@ export function AnalyticsFilterProvider({ children }: { children: ReactNode }) {
     (next: AnalyticsFilters) => {
       setFilters(next);
       writeStored(user.id, next);
-      if (pathname === "/login") return;
+      if (
+        pathname === "/login" ||
+        pathname === "/en/login" ||
+        pathname === "/ar/login"
+      ) {
+        return;
+      }
       void navigate({
         to: ".",
         replace: true,

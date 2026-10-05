@@ -58,7 +58,7 @@ import {
   tooltipMirrorStyle,
 } from "@/components/dashboard/chart-rtl";
 
-export const Route = createFileRoute("/$role/performance")({
+export const Route = createFileRoute("/$locale/$role/performance")({
   beforeLoad: roleGuard("/performance"),
   head: () => ({
     meta: [
@@ -328,7 +328,7 @@ function PerformanceReport() {
         </Panel>
       </div>
 
-      <AiDecisionSection />
+      <AiDecisionSection page="performance" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Panel title={pp.scoreDistribution}>

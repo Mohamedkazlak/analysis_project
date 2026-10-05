@@ -230,6 +230,42 @@ def build_evidence(role: str, data: dict[str, Any]) -> list[dict]:
                     dataset="item_analysis",
                 ),
             )
+        participation = data.get("participation") or {}
+        if participation.get("attendanceRate") is not None:
+            _add(
+                metrics,
+                _metric(
+                    "attendance_rate",
+                    participation.get("attendanceRate"),
+                    dataset="participation",
+                ),
+            )
+        for row in (participation.get("attendanceByCurriculum") or [])[:12]:
+            _add(
+                metrics,
+                _metric(
+                    "attendance_rate",
+                    row.get("attendance"),
+                    entity=row.get("course"),
+                    dataset="attendanceByCurriculum",
+                ),
+            )
+        performance = data.get("performance") or {}
+        below = [
+            row
+            for row in performance.get("ranked") or []
+            if row.get("status") == "Fail"
+        ]
+        if performance.get("ranked"):
+            _add(
+                metrics,
+                _metric(
+                    "students_below_pass",
+                    len(below),
+                    unit="count",
+                    dataset="student_performance",
+                ),
+            )
         return metrics[:24]
 
     if role == "academic_affairs":

@@ -36,7 +36,7 @@ import {
   monthExamChange,
 } from "@/components/dashboard/exam-activity-chart";
 
-export const Route = createFileRoute("/$role/exam-activity")({
+export const Route = createFileRoute("/$locale/$role/exam-activity")({
   beforeLoad: roleGuard("/exam-activity"),
   head: () => ({
     meta: [
@@ -220,7 +220,7 @@ function ExamActivity() {
       <AiInsight size="lg" headline={insight.headline}>
         {insight.body}
       </AiInsight>
-      <AiDecisionSection />
+      <AiDecisionSection page="exam-activity" />
 
       <Panel title={ea.monthlyTitle} action={periodFilters}>
         <p className="mb-3 text-[12px] text-ink-soft">{ea.monthlyHint}</p>

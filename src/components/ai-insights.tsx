@@ -13,7 +13,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Role } from "@/lib/types";
-import { aiConfig } from "@/lib/ai/config";
+import { aiConfig, AI_PAGE_LABELS, type AiPage } from "@/lib/ai/config";
 import {
   getAiDecision,
   type AiWarning,
@@ -27,6 +27,7 @@ import { useRole } from "./role-context";
 import { useFilteredQuery } from "@/components/dashboard/use-analytics-filters";
 import { ROLE_SLUG, roleRouteTo } from "@/lib/auth/role-guards";
 import { useLocale, translateOrgName } from "@/lib/i18n";
+import { openChat } from "@/lib/chat-bus";
 
 export function AiFrame({
   label,
@@ -36,10 +37,12 @@ export function AiFrame({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border-2 border-ai/60 bg-gradient-to-br from-violet/10 via-iris/5 to-cyan/10 p-5 backdrop-blur-xl">
-      <div className="flex items-center gap-2">
-        <Lightbulb className="size-4 text-ai" strokeWidth={2.4} />
-        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-ai">
+    <section className="rounded-[1.75rem] border border-ai/25 bg-gradient-to-br from-white/90 via-violet/8 to-cyan/10 p-6 shadow-[0_18px_50px_-28px_rgba(79,70,229,0.45)] backdrop-blur-xl sm:p-7">
+      <div className="flex items-center gap-2.5">
+        <span className="grid size-8 place-items-center rounded-2xl bg-ai/12 text-ai">
+          <Lightbulb className="size-4" strokeWidth={2.4} />
+        </span>
+        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-ai">
           {label}
         </span>
       </div>
@@ -63,10 +66,11 @@ function AiSkeleton({ label }: { label: string }) {
 
 function AiAction({ label, to }: { label: string; to: string }) {
   const { role } = useRole();
+  const { locale } = useLocale();
   return (
     <Link
       to={roleRouteTo(to)}
-      params={{ role: ROLE_SLUG[role] }}
+      params={{ locale, role: ROLE_SLUG[role] }}
       search={{}}
       className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-ai px-4 py-2 text-[12px] font-semibold text-white shadow-lg shadow-ai/25 transition-opacity hover:opacity-90"
     >
@@ -246,13 +250,13 @@ export function ConfirmDialog({
 }) {
   const navigate = useNavigate();
   const { role } = useRole();
-  const { messages } = useLocale();
+  const { locale, messages } = useLocale();
   function confirm() {
     onClose();
     if (action.to) {
       void navigate({
         to: roleRouteTo(action.to),
-        params: { role: ROLE_SLUG[role] },
+        params: { locale, role: ROLE_SLUG[role] },
         search: {},
       });
       return;
@@ -370,6 +374,118 @@ export function AiWarnings({
   );
 }
 
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-soft">
+      {children}
+    </div>
+  );
+}
+
+function simplifyAlertText(text: string): string {
+  return text
+    .replace(/\s*below the [\d.]+%?\s*review threshold\.?/gi, "")
+    .replace(/\s*below the [\d.]+%?\s*threshold\.?/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function shortForecastCopy(
+  status: {
+    kind: string;
+    message?: string;
+    value?: number | null;
+    low?: number | null;
+    high?: number | null;
+  },
+  copy: {
+    outlook: string;
+    standing: string;
+    nextPeriodEstimate: string;
+    likelyRange: string;
+    notEnoughHistory: string;
+    showingCurrentNotForecast: string;
+  },
+): { title: string; body: string } {
+  if (status.kind === "forecast" && status.value != null) {
+    const range =
+      status.low != null && status.high != null
+        ? copy.likelyRange
+            .replace("{low}", String(status.low))
+            .replace("{high}", String(status.high))
+        : "";
+    return {
+      title: copy.outlook,
+      body: `${copy.nextPeriodEstimate.replace("{value}", String(status.value))}${range}`,
+    };
+  }
+  if (status.kind === "insufficient") {
+    return {
+      title: copy.outlook,
+      body: copy.notEnoughHistory,
+    };
+  }
+  return {
+    title: copy.standing,
+    body: copy.showingCurrentNotForecast,
+  };
+}
+
+function ExecutiveActions({
+  cardId,
+  slice,
+  whatIfQuestion,
+}: {
+  cardId: string;
+  slice: Record<string, string | null | undefined>;
+  whatIfQuestion?: string;
+}) {
+  const { messages } = useLocale();
+  const chips = [
+    {
+      label: messages.ai.askAi,
+      question: messages.ai.explainMainFinding,
+      primary: true,
+    },
+    {
+      label: messages.ai.whatIf,
+      question: whatIfQuestion || messages.ai.whatIfWeakest,
+      primary: false,
+    },
+    {
+      label: messages.ai.whyQuestion,
+      question: messages.ai.whyDoesThisMatter,
+      primary: false,
+    },
+  ];
+  return (
+    <div className="mt-5 flex flex-wrap gap-2">
+      {chips.map((c) => (
+        <button
+          key={c.label}
+          type="button"
+          onClick={() =>
+            openChat({
+              context: "AI analysis",
+              question: c.question,
+              cardId,
+              slice,
+            })
+          }
+          className={cn(
+            "rounded-full px-3.5 py-2 text-[12px] font-semibold transition-all duration-150 active:scale-95",
+            c.primary
+              ? "bg-ai text-white shadow-lg shadow-ai/25 hover:opacity-90"
+              : "border border-ai/30 bg-white/70 text-ai hover:bg-ai/5",
+          )}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function AiRecommendations({
   items,
   onAction,
@@ -428,20 +544,25 @@ export function AiRecommendations({
 export function AiDecisionCard({
   role: roleProp,
   insightId,
+  page = "overview",
 }: {
   role?: Role;
   insightId?: string;
+  page?: AiPage;
 }) {
   const { role: contextRole, user } = useRole();
   const { locale, messages } = useLocale();
   const role = roleProp ?? contextRole;
-  const traceId = insightId ?? `insight-${role}-${user.id}`;
+  const traceId = insightId ?? `insight-${page}-${role}-${user.id}`;
   const [pendingItem, setPendingItem] = useState<Recommendation | null>(null);
-  const { filters, filtersReady, queryKey, enabled } =
-    useFilteredQuery("ai-decision");
+  const [showAllImpact, setShowAllImpact] = useState(false);
+  const [showAllAlerts, setShowAllAlerts] = useState(false);
+  const { filters, filtersReady, queryKey, enabled } = useFilteredQuery(
+    `ai-decision-${page}`,
+  );
   const { data, isPending } = useQuery({
-    queryKey: [...queryKey, role, traceId, locale],
-    queryFn: () => getAiDecision(filters, locale),
+    queryKey: [...queryKey, role, traceId, locale, page],
+    queryFn: () => getAiDecision(filters, locale, page),
     enabled,
     retry: false,
     staleTime: 30_000,
@@ -450,7 +571,9 @@ export function AiDecisionCard({
   });
 
   const label =
-    role === "student" ? messages.ai.recommendations : messages.ai.decision;
+    data?.pageLabel ||
+    AI_PAGE_LABELS[page] ||
+    (role === "student" ? messages.ai.recommendations : messages.ai.decision);
 
   if (!filtersReady) return null;
   if (isPending) return <AiSkeleton label={label} />;
@@ -476,8 +599,34 @@ export function AiDecisionCard({
   const evidence = data?.evidence ?? [];
   const warnings: AiWarning[] | Insight["warnings"] =
     data?.warnings ?? insight?.warnings ?? [];
+  const narrative = data?.narrative;
+  const impactItems = data?.impactItems ?? [];
+  const ruleAlerts = data?.ruleAlerts ?? [];
+  const anomalies = data?.anomalies ?? [];
+  const forecastStatus = data?.forecastStatus;
+  const evidenceQuality = data?.evidenceQuality;
+  const slice = {
+    sectorId: filters.sectorId,
+    collegeId: filters.collegeId,
+    curriculumId: filters.curriculumId,
+    studentId: filters.studentId,
+    professorId: filters.professorId,
+  };
+  const scopeParts = [
+    filters.curriculumId
+      ? `${messages.ai.scopeCourse} · ${filters.curriculumId}`
+      : filters.collegeId
+        ? `${messages.ai.scopeCollege} · ${translateOrgName(filters.collegeId, locale)}`
+        : filters.sectorId
+          ? `${messages.ai.scopeSector} · ${translateOrgName(filters.sectorId, locale)}`
+          : messages.ai.scopeUniversity,
+  ];
+  const courseMatch = impactItems[0]?.issue?.match(/^(?:Course|مقرر)\s+(.+)$/i);
+  const whatIfQuestion = courseMatch?.[1]
+    ? messages.ai.whatIfCourse.replace("{course}", courseMatch[1])
+    : messages.ai.whatIfWeakest;
 
-  if (!insight && recommendations.length === 0 && !prediction)
+  if (!insight && recommendations.length === 0 && !prediction && !narrative)
     return (
       <AiFrame label={label}>
         <p className="mt-2 text-[13px] text-ink-soft">
@@ -490,45 +639,287 @@ export function AiDecisionCard({
 
   const showWarnings =
     aiConfig.showWarnings[role] && (warnings?.length ?? 0) > 0;
+  const headline = narrative?.headline || insight?.headline;
+  const story = narrative?.story || insight?.body;
+
+  const topImpact = showAllImpact
+    ? impactItems.slice(0, 5)
+    : impactItems.slice(0, 3);
+  const topAlerts = showAllAlerts
+    ? ruleAlerts.slice(0, 6)
+    : ruleAlerts.slice(0, 3);
+  const topAnomalies = anomalies.slice(0, 2);
+  const topRecs = recommendations.slice(0, 3);
+  const outlook = forecastStatus
+    ? shortForecastCopy(forecastStatus, {
+        outlook: messages.ai.outlook,
+        standing: messages.ai.standing,
+        nextPeriodEstimate: messages.ai.nextPeriodEstimate,
+        likelyRange: messages.ai.likelyRange,
+        notEnoughHistory: messages.ai.notEnoughHistory,
+        showingCurrentNotForecast: messages.ai.showingCurrentNotForecast,
+      })
+    : null;
 
   return (
     <AiFrame label={label}>
-      {insight && (
-        <>
-          <h3 className="font-display mt-2 text-[15px] font-bold text-ink">
-            {insight.headline}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[12px] text-ink-soft">
+        <span className="rounded-full bg-white/80 px-2.5 py-1 font-medium text-ink">
+          {scopeParts.join(" · ")}
+        </span>
+        {evidenceQuality?.label && (
+          <span className="rounded-full bg-mint/10 px-2.5 py-1 font-medium text-mintink">
+            {evidenceQuality.label}
+          </span>
+        )}
+      </div>
+
+      {headline && (
+        <div className="mt-5">
+          <h3 className="font-display text-[1.35rem] font-bold leading-snug text-ink sm:text-[1.5rem]">
+            {headline}
           </h3>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-ink">
-            {insight.body}
-          </p>
-          <AiEvidence metrics={evidence} />
-        </>
+          {story && (
+            <p className="mt-3 max-w-3xl text-[15px] leading-relaxed text-ink-soft">
+              {story}
+            </p>
+          )}
+        </div>
       )}
 
-      {data?.narrationStatus === "pending" && (
-        <p className="mt-2 text-[11px] text-ink-soft">
-          {messages.ai.narrationPending}
+      {!headline && insight?.body && (
+        <p className="mt-5 max-w-3xl text-[15px] leading-relaxed text-ink">
+          {insight.body}
         </p>
       )}
 
-      {prediction && <AiPrediction data={prediction} />}
+      <ExecutiveActions
+        cardId={traceId}
+        slice={slice}
+        whatIfQuestion={whatIfQuestion}
+      />
 
-      {showWarnings && warnings && <AiWarnings warnings={warnings} />}
+      {topImpact.length > 0 && (
+        <div className="mt-8">
+          <SectionLabel>{messages.ai.priorities}</SectionLabel>
+          <div className="space-y-3">
+            {topImpact.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-start gap-4 rounded-2xl border border-white/80 bg-white/75 px-4 py-4 shadow-sm"
+              >
+                <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full bg-ai/10 text-[12px] font-bold text-ai">
+                  {item.rank}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[14px] font-semibold leading-snug text-ink">
+                    {simplifyAlertText(item.issue)}
+                  </p>
+                  <p className="mt-1.5 text-[12.5px] text-ink-soft">
+                    {messages.ai.ifAddressed.replace(
+                      "{pts}",
+                      String(item.uplift_university),
+                    )}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+          {impactItems.length > 3 && (
+            <button
+              type="button"
+              onClick={() => setShowAllImpact((v) => !v)}
+              className="mt-3 text-[12px] font-semibold text-ai"
+            >
+              {showAllImpact
+                ? messages.ai.showLess
+                : messages.ai.showAll.replace(
+                    "{count}",
+                    String(impactItems.length),
+                  )}
+            </button>
+          )}
+        </div>
+      )}
 
-      {insight?.cases && (
-        <div className="mt-4 space-y-2.5">
+      {(topAlerts.length > 0 || topAnomalies.length > 0 || showWarnings) && (
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          {topAlerts.length > 0 && (
+            <div>
+              <SectionLabel>{messages.ai.needsAttention}</SectionLabel>
+              <div className="space-y-3">
+                {topAlerts.map((a) => (
+                  <div
+                    key={String(a["id"])}
+                    className="rounded-2xl border border-amber/20 bg-amber/5 px-4 py-3.5"
+                  >
+                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-amberink">
+                      {messages.ai.threshold}
+                    </div>
+                    <p className="mt-1.5 text-[13.5px] font-medium leading-snug text-ink">
+                      {simplifyAlertText(String(a["text"] || ""))}
+                    </p>
+                    {a["value"] != null && a["threshold"] != null && (
+                      <p className="mt-1 text-[12px] text-ink-soft">
+                        {messages.ai.nowReviewLine
+                          .replace("{value}", String(a["value"]))
+                          .replace("{threshold}", String(a["threshold"]))}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {ruleAlerts.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAlerts((v) => !v)}
+                  className="mt-3 text-[12px] font-semibold text-ai"
+                >
+                  {showAllAlerts
+                    ? messages.ai.showLess
+                    : messages.ai.showAll.replace(
+                        "{count}",
+                        String(ruleAlerts.length),
+                      )}
+                </button>
+              )}
+            </div>
+          )}
+
+          {(topAnomalies.length > 0 ||
+            (showWarnings &&
+              warnings &&
+              ruleAlerts.length === 0 &&
+              anomalies.length === 0)) && (
+            <div>
+              <SectionLabel>
+                {topAnomalies.length > 0
+                  ? messages.ai.unusualPatterns
+                  : messages.ai.warnings}
+              </SectionLabel>
+              <div className="space-y-3">
+                {topAnomalies.map((a) => (
+                  <div
+                    key={String(a["id"])}
+                    className="rounded-2xl border border-ai/20 bg-ai/5 px-4 py-3.5"
+                  >
+                    <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-ai">
+                      {messages.ai.pattern}
+                    </div>
+                    <p className="mt-1.5 text-[13.5px] font-medium leading-snug text-ink">
+                      {String(a["text"] || "")}
+                    </p>
+                  </div>
+                ))}
+                {showWarnings &&
+                  warnings &&
+                  ruleAlerts.length === 0 &&
+                  anomalies.length === 0 &&
+                  warnings.slice(0, 3).map((w) => (
+                    <div
+                      key={w.id}
+                      className={cn(
+                        "rounded-2xl px-4 py-3.5 text-[13.5px] font-medium",
+                        w.tone === "rose"
+                          ? "bg-rose/10 text-rosee"
+                          : "bg-amber/12 text-amberink",
+                      )}
+                    >
+                      {"text" in w ? w.text : ""}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {outlook && (
+        <div className="mt-8">
+          <SectionLabel>{outlook.title}</SectionLabel>
+          <div className="rounded-2xl border border-white/80 bg-white/75 px-4 py-4 shadow-sm">
+            <p className="text-[14px] leading-relaxed text-ink">
+              {outlook.body}
+            </p>
+            {forecastStatus?.kind === "forecast" &&
+              forecastStatus.value != null && (
+                <div className="mt-3 flex flex-wrap gap-3">
+                  <div className="rounded-xl bg-ai/8 px-3 py-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-ink-soft">
+                      {messages.ai.estimate}
+                    </div>
+                    <div className="text-[18px] font-bold text-ai">
+                      {forecastStatus.value}%
+                    </div>
+                  </div>
+                  {forecastStatus.low != null &&
+                    forecastStatus.high != null && (
+                      <div className="rounded-xl bg-black/[0.03] px-3 py-2">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-ink-soft">
+                          {messages.ai.range}
+                        </div>
+                        <div className="text-[18px] font-bold text-ink">
+                          {forecastStatus.low}–{forecastStatus.high}%
+                        </div>
+                      </div>
+                    )}
+                </div>
+              )}
+          </div>
+        </div>
+      )}
+
+      {!outlook && prediction && (
+        <div className="mt-8">
+          <SectionLabel>{messages.ai.standing}</SectionLabel>
+          <AiPrediction data={prediction} />
+        </div>
+      )}
+
+      {topRecs.length > 0 && (
+        <div className="mt-8">
+          <SectionLabel>{messages.ai.suggestedNextSteps}</SectionLabel>
+          <ul className="space-y-3">
+            {topRecs.map((item) => (
+              <li
+                key={item.id}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/80 bg-white/75 px-4 py-3.5 shadow-sm"
+              >
+                <p className="min-w-0 flex-1 text-[14px] font-medium leading-snug text-ink">
+                  {item.text}
+                </p>
+                {item.action && (
+                  <button
+                    onClick={() => setPendingItem(item)}
+                    className="shrink-0 rounded-full bg-ai px-3.5 py-1.5 text-[11px] font-semibold text-white shadow-md shadow-ai/20 transition-opacity hover:opacity-90"
+                  >
+                    {item.action.label}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {insight?.cases && insight.cases.length > 0 && (
+        <div className="mt-8 space-y-2.5">
+          <SectionLabel>{messages.ai.cases}</SectionLabel>
           {insight.cases.map((c) => (
             <RiskCaseRow key={c.id} item={c} />
           ))}
         </div>
       )}
 
-      <AiRecommendations items={recommendations} onAction={setPendingItem} />
+      {insight?.action &&
+        !recommendations.some((r) => r.action?.to === insight.action?.to) && (
+          <AiAction {...insight.action} />
+        )}
 
-      {insight?.action && <AiAction {...insight.action} />}
-      <p className="mt-3 text-[11px] text-ink-soft">
-        {messages.ai.traced} {traceId} · {messages.ai.confirmFirst}
-      </p>
+      <div className="mt-6 border-t border-black/5 pt-4">
+        <AiEvidence metrics={evidence} />
+      </div>
+
       {pendingItem && (
         <ConfirmDialog
           action={pendingItem.action!}
@@ -539,14 +930,21 @@ export function AiDecisionCard({
   );
 }
 
-/** Tier 1 decision pages render this single narrative card. */
-export function AiDecisionSection({ role }: { role?: Role }) {
+/** Page-local AI analysis for the current dashboard surface. */
+export function AiDecisionSection({
+  role,
+  page = "overview",
+}: {
+  role?: Role;
+  page?: AiPage;
+}) {
   const { role: contextRole } = useRole();
   const effective = role ?? contextRole;
   return (
     <AiDecisionCard
       {...(role ? { role } : {})}
-      insightId={`insight-${effective}`}
+      page={page}
+      insightId={`insight-${page}-${effective}`}
     />
   );
 }
